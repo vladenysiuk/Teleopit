@@ -8,12 +8,19 @@ import torch
 
 from train_mimic.tasks.climbing.config.ladder import LadderConfig
 from train_mimic.tasks.climbing.config.latch import LatchConfig
+from train_mimic.tasks.climbing.config.curriculum import CurriculumConfig
 from train_mimic.tasks.climbing.config.observations import RelativeRungObsConfig
 from train_mimic.tasks.climbing.ladder.contacts import ClimbContactState
 from train_mimic.tasks.climbing.ladder.latch import ClimbLatchState
 from train_mimic.tasks.climbing.ladder.relative_rungs import RelativeRungProvider
 from train_mimic.tasks.climbing.ladder.reward_state import ClimbRewardState
 from train_mimic.tasks.climbing.ladder.state import LadderRuntime
+from train_mimic.tasks.climbing.curriculum import (
+    apply_ladder_physics_randomization,
+    apply_latch_capture_randomization,
+    invalidate_hold_pose_cache,
+    reset_climb_initial_pose,
+)
 
 if TYPE_CHECKING:
     from mjlab.envs import ManagerBasedRlEnv
@@ -31,6 +38,26 @@ def reset_ladder_sample(
     if runtime is None:
         runtime = LadderRuntime.attach(env, ladder_cfg, seed=env.cfg.seed)
     runtime.resample(env_ids)
+    invalidate_hold_pose_cache(env)
+
+
+def reset_climb_curriculum_physics(
+    env: ManagerBasedRlEnv,
+    env_ids: torch.Tensor | None,
+    curriculum_cfg: CurriculumConfig,
+) -> None:
+    """Apply curriculum rung friction and latch capture sampling after ladder resample."""
+    apply_ladder_physics_randomization(env, env_ids, curriculum_cfg)
+    apply_latch_capture_randomization(env, env_ids, curriculum_cfg)
+
+
+def reset_climb_curriculum_pose(
+    env: ManagerBasedRlEnv,
+    env_ids: torch.Tensor | None,
+    curriculum_cfg: CurriculumConfig,
+) -> None:
+    """Apply assisted hold initial pose and optional hand attachments."""
+    reset_climb_initial_pose(env, env_ids, curriculum_cfg)
 
 
 def attach_climb_contact_state(

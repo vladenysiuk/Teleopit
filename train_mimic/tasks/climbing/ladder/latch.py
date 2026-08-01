@@ -136,6 +136,8 @@ class HandLatchState:
     detach_event: torch.Tensor
     invalid_attach_request: torch.Tensor
     latch_command: torch.Tensor
+    capture_radius: torch.Tensor
+    """Per-environment attach eligibility radius (m), shape ``[B]``."""
 
 
 class LatchBackend(ABC):
@@ -291,6 +293,12 @@ class ClimbLatchState:
                 detach_event=torch.zeros(batch, num_hands, dtype=torch.bool, device=device),
                 invalid_attach_request=torch.zeros(batch, num_hands, dtype=torch.bool, device=device),
                 latch_command=torch.zeros(batch, num_hands, dtype=torch.float32, device=device),
+                capture_radius=torch.full(
+                    (batch,),
+                    float(self.latch_cfg.capture_radius),
+                    dtype=torch.float32,
+                    device=device,
+                ),
             )
         return self.state
 
@@ -316,6 +324,7 @@ class ClimbLatchState:
             self.state.detach_event[env_ids] = False
             self.state.invalid_attach_request[env_ids] = False
             self.state.latch_command[env_ids] = 0.0
+            self.state.capture_radius[env_ids] = float(self.latch_cfg.capture_radius)
 
     @staticmethod
     def decode_command(raw: torch.Tensor, latch_cfg: LatchConfig) -> torch.Tensor:
@@ -353,7 +362,8 @@ class ClimbLatchState:
             rid = int(rung_ids[local_idx].item())
             site_pos = self._rung_site_pos_w(env_ids[local_idx : local_idx + 1], rid)[0]
             dist = torch.linalg.norm(site_pos - hand_pos[local_idx], dim=-1)
-            eligible = dist <= self.latch_cfg.capture_radius
+            radius = float(self.state.capture_radius[env_ids[local_idx]].item())
+            eligible = dist <= radius
             if not bool(torch.any(eligible).item()):
                 continue
             masked = torch.where(eligible, dist, torch.full_like(dist, 1.0e9))

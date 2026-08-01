@@ -37,6 +37,12 @@ Stage 8 — tiny PPO smoke test (infrastructure validation, not learnability):
 
     python train_mimic/scripts/debug_climb.py --mode ppo-smoke --seed 42
     python train_mimic/scripts/train_climb.py --smoke
+
+Stage 9 — easy learnability baselines and short experiment:
+
+    python train_mimic/scripts/debug_climb.py --mode baseline-compare --seed 42
+    python train_mimic/scripts/debug_climb.py --mode learnability --seed 42
+    python train_mimic/scripts/train_climb.py --easy
 """
 
 from __future__ import annotations
@@ -1161,6 +1167,55 @@ def run_ppo_smoke_mode(args: argparse.Namespace) -> None:
         raise SystemExit("[ppo-smoke] smoke report failed exit criteria")
 
 
+def run_baseline_compare_mode(args: argparse.Namespace) -> None:
+    from train_mimic.tasks.climbing.config.easy import CI_EASY_NUM_ENVS
+    from train_mimic.tasks.climbing.learnability import (
+        print_baseline_report,
+        run_baseline_comparison,
+    )
+
+    num_envs = args.num_envs if args.num_envs != 1 else CI_EASY_NUM_ENVS
+    zero, random = run_baseline_comparison(
+        num_envs=num_envs,
+        seed=args.seed,
+        rollout_steps=args.rollout_steps,
+        device=args.device,
+    )
+    print_baseline_report(zero, random)
+    if not (zero.ok and random.ok):
+        raise SystemExit("[baseline-compare] baseline rollout failed")
+
+
+def run_learnability_mode(args: argparse.Namespace) -> None:
+    from train_mimic.tasks.climbing.config.easy import (
+        CI_EASY_MAX_ITERATIONS,
+        CI_EASY_NUM_ENVS,
+        CI_EASY_SAVE_INTERVAL,
+    )
+    from train_mimic.tasks.climbing.learnability import (
+        print_learnability_report,
+        run_learnability_experiment,
+    )
+
+    num_envs = args.num_envs if args.num_envs != 1 else CI_EASY_NUM_ENVS
+    max_iterations = (
+        args.learnability_iterations
+        if args.learnability_iterations is not None
+        else CI_EASY_MAX_ITERATIONS
+    )
+    report = run_learnability_experiment(
+        num_envs=num_envs,
+        max_iterations=max_iterations,
+        save_interval=CI_EASY_SAVE_INTERVAL,
+        seed=args.seed,
+        rollout_steps=args.rollout_steps,
+        device=args.device,
+    )
+    print_learnability_report(report)
+    if not report.ok:
+        raise SystemExit("[learnability] experiment failed exit criteria")
+
+
 def viewer_kwargs_verbosity(verbose: bool) -> int:
     from mjlab.viewer.base import VerbosityLevel
 
@@ -1187,6 +1242,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             "scripted",
             "reset-stress",
             "ppo-smoke",
+            "baseline-compare",
+            "learnability",
         ],
         help="Debug mode",
     )
@@ -1284,6 +1341,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Run zero/random/scripted/reset-stress without opening a viewer",
     )
+    parser.add_argument(
+        "--learnability-iterations",
+        type=int,
+        default=None,
+        help="PPO iterations for learnability mode (default: CI preset)",
+    )
     parser.add_argument("--verbose", action="store_true", help="Verbose viewer logging")
     return parser.parse_args(argv)
 
@@ -1325,6 +1388,12 @@ def main(argv: list[str] | None = None) -> None:
         return
     if args.mode == "ppo-smoke":
         run_ppo_smoke_mode(args)
+        return
+    if args.mode == "baseline-compare":
+        run_baseline_compare_mode(args)
+        return
+    if args.mode == "learnability":
+        run_learnability_mode(args)
         return
     raise SystemExit(f"Unsupported mode: {args.mode}")
 

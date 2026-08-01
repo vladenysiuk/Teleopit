@@ -9,6 +9,7 @@ import numpy as np
 import torch
 
 from train_mimic.tasks.climbing.config.hold_pose import HoldPoseConfig
+from train_mimic.tasks.climbing.config.curriculum import CurriculumConfig
 from train_mimic.tasks.climbing.config.robot import HAND_INDEX
 from train_mimic.tasks.climbing.debug_latch import build_latch_action
 from train_mimic.tasks.climbing.ladder.hold_ik import HoldPoseSolution, solve_hold_pose_ik
@@ -161,6 +162,7 @@ def _seed_hand_latch(
     hand: str,
     rung_id: int,
     site_id: int,
+    env_ids: torch.Tensor | None = None,
 ) -> None:
     """Force-activate one hand connect equality and sync Python latch state.
 
@@ -173,7 +175,8 @@ def _seed_hand_latch(
     eq_id = int(latch.topology.eq_ids[hand_idx, rung_id, site_id].item())
     if eq_id < 0:
         raise RuntimeError(f"Missing latch equality for {hand} rung={rung_id} site={site_id}")
-    env_ids = torch.arange(env.num_envs, device=env.device, dtype=torch.int64)
+    if env_ids is None:
+        env_ids = torch.arange(env.num_envs, device=env.device, dtype=torch.int64)
     latch.backend.set_active(env_ids, hand_idx, eq_id, active=True)
     latch.state.attached[env_ids, hand_idx] = True
     latch.state.rung_id[env_ids, hand_idx] = rung_id
@@ -181,6 +184,117 @@ def _seed_hand_latch(
     latch.state.active_eq_id[env_ids, hand_idx] = eq_id
     latch.state.attach_event[env_ids, hand_idx] = False
     latch.state.invalid_attach_request[env_ids, hand_idx] = False
+
+
+def seed_initial_hand_latches(
+    env: ManagerBasedRlEnv,
+    hold_cfg: HoldPoseConfig,
+    curriculum: CurriculumConfig,
+    *,
+    env_ids: torch.Tensor,
+    generator: torch.Generator | None = None,
+) -> None:
+    """Probabilistically seed left/right hand latches after hold-pose reset."""
+    prob = float(curriculum.initial_hand_attach_prob)
+    for hand, rung_id, site_id in (
+        ("left", hold_cfg.left_hand_rung_id, hold_cfg.left_hand_site_id),
+        ("right", hold_cfg.right_hand_rung_id, hold_cfg.right_hand_site_id),
+    ):
+        if prob >= 1.0:
+            attach = True
+        elif prob <= 0.0:
+            attach = False
+        else:
+            attach = bool(
+                torch.rand((), device=env.device, generator=generator).item() < prob
+            )
+        if attach:
+            _seed_hand_latch(
+                env,
+                hand=hand,
+                rung_id=rung_id,
+                site_id=site_id,
+                env_ids=env_ids,
+            )
+
+
+def _yaw_quat_wxyz(yaw_rad: float) -> np.ndarray:
+    half = yaw_rad * 0.5
+    return np.array([np.cos(half), 0.0, 0.0, np.sin(half)], dtype=np.float64)
+
+
+def _quat_mul_wxyz(a: np.ndarray, b: np.ndarray) -> np.ndarray:
+    aw, ax, ay, az = a
+    bw, bx, by, bz = b
+    return np.array(
+        [
+            aw * bw - ax * bx - ay * by - az * bz,
+            aw * bx + ax * bw + ay * bz - az * by,
+            aw * by - ax * bz + ay * bw + az * bx,
+            aw * bz + ax * by - ay * bx + az * bw,
+        ],
+        dtype=np.float64,
+    )
+
+
+def apply_hold_pose_to_env_ids(
+    env: ManagerBasedRlEnv,
+    solution: HoldPoseSolution,
+    env_ids: torch.Tensor,
+    *,
+    spawn_root_lift_m: float = 0.0,
+    root_pos_noise_std: tuple[float, float, float] = (0.0, 0.0, 0.0),
+    root_yaw_noise_rad: float = 0.0,
+    joint_pos_noise_std: float = 0.0,
+    generator: torch.Generator | None = None,
+) -> None:
+    """Write IK pose to selected envs with optional root/joint noise."""
+    robot = env.scene["robot"]
+    device = env.device
+    joint_dim = solution.joint_pos.shape[0]
+
+    for env_idx in env_ids.tolist():
+        joint_pos = torch.as_tensor(solution.joint_pos, device=device, dtype=torch.float32).clone()
+        if joint_pos_noise_std > 0.0:
+            noise = torch.randn(joint_dim, device=device, generator=generator, dtype=torch.float32)
+            joint_pos = joint_pos + joint_pos_noise_std * noise
+
+        root = np.asarray(solution.root_pos, dtype=np.float64).copy()
+        root[2] += float(spawn_root_lift_m)
+        if any(v > 0.0 for v in root_pos_noise_std):
+            noise = torch.randn(3, device=device, generator=generator, dtype=torch.float32)
+            std = torch.tensor(root_pos_noise_std, device=device, dtype=torch.float32)
+            root = root + (noise * std).detach().cpu().numpy()
+
+        root_quat = np.asarray(solution.root_quat_wxyz, dtype=np.float64).copy()
+        if root_yaw_noise_rad > 0.0:
+            delta = float(
+                (torch.rand((), device=device, generator=generator).item() * 2.0 - 1.0)
+                * root_yaw_noise_rad
+            )
+            root_quat = _quat_mul_wxyz(root_quat, _yaw_quat_wxyz(delta))
+            root_quat = root_quat / np.linalg.norm(root_quat)
+
+        ids = torch.tensor([env_idx], device=device, dtype=torch.int64)
+        robot.write_joint_state_to_sim(
+            joint_pos.view(1, -1),
+            torch.zeros(1, joint_dim, device=device, dtype=torch.float32),
+            env_ids=ids,
+        )
+        robot.write_root_link_pose_to_sim(
+            torch.cat(
+                [
+                    torch.as_tensor(root, device=device, dtype=torch.float32).view(1, 3),
+                    torch.as_tensor(root_quat, device=device, dtype=torch.float32).view(1, 4),
+                ],
+                dim=-1,
+            ),
+            env_ids=ids,
+        )
+        robot.write_root_link_velocity_to_sim(
+            torch.zeros(1, 6, device=device, dtype=torch.float32),
+            env_ids=ids,
+        )
 
 
 def apply_hold_pose_to_env(

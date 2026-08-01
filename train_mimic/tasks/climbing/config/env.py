@@ -18,6 +18,7 @@ from mjlab.viewer import ViewerConfig
 from train_mimic.tasks.climbing.config.hold_pose import HoldPoseConfig
 from train_mimic.tasks.climbing.config.ladder import LadderConfig
 from train_mimic.tasks.climbing.config.latch import LatchConfig
+from train_mimic.tasks.climbing.config.curriculum import CurriculumConfig
 from train_mimic.tasks.climbing.config.observations import (
     LadderObservationConfig,
     RelativeRungObsConfig,
@@ -137,6 +138,7 @@ def make_general_climbing_env_cfg(
     ladder_observation_cfg: LadderObservationConfig | None = None,
     reward_cfg: ClimbingRewardConfig | None = None,
     termination_cfg: ClimbingTerminationConfig | None = None,
+    curriculum_cfg: CurriculumConfig | None = None,
     play: bool = False,
     env_spacing: float = 4.0,
 ) -> ManagerBasedRlEnvCfg:
@@ -173,8 +175,8 @@ def make_general_climbing_env_cfg(
         },
         events={
             # Safe reset order: deactivate equalities → clear Python latch/contact
-            # state → resample ladder sites. Moving sites while an old connect
-            # remains active can produce a one-step impulse.
+            # state → resample ladder sites → curriculum physics/pose. Moving sites
+            # while an old connect remains active can produce a one-step impulse.
             "reset_climb_latch": EventTermCfg(
                 func=climb_events.reset_climb_latch_state,
                 mode="reset",
@@ -246,6 +248,17 @@ def make_general_climbing_env_cfg(
         reward_cfg=reward_cfg,
         term_cfg=termination_cfg,
     )
+    if curriculum_cfg is not None:
+        cfg.events["reset_climb_curriculum_physics"] = EventTermCfg(
+            func=climb_events.reset_climb_curriculum_physics,
+            mode="reset",
+            params={"curriculum_cfg": curriculum_cfg},
+        )
+        cfg.events["reset_climb_curriculum_pose"] = EventTermCfg(
+            func=climb_events.reset_climb_curriculum_pose,
+            mode="reset",
+            params={"curriculum_cfg": curriculum_cfg},
+        )
     if play:
         cfg.observations["actor_proprio"].enable_corruption = False
         cfg.observations["actor_proprio_history"].enable_corruption = False

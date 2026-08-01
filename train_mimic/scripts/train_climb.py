@@ -45,6 +45,14 @@ from train_mimic.tasks.climbing.config.smoke import (
     SMOKE_SEED,
     make_climbing_smoke_env_cfg,
 )
+from train_mimic.tasks.climbing.config.easy import (
+    EASY_EPISODE_LENGTH_S,
+    EASY_MAX_ITERATIONS,
+    EASY_NUM_ENVS,
+    EASY_SAVE_INTERVAL,
+    EASY_SEED,
+    make_climbing_easy_env_cfg,
+)
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
@@ -67,6 +75,14 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help=(
             "Stage 8 smoke preset: pinned easy ladder, 64 envs, 100 iterations, "
             "conservative episode length, no broad domain randomization."
+        ),
+    )
+    parser.add_argument(
+        "--easy",
+        action="store_true",
+        help=(
+            "Stage 9 easy learnability preset: assisted hold start, both hands "
+            "attached, fixed ladder, 256 envs, 800 iterations."
         ),
     )
     return parser.parse_args(argv)
@@ -164,6 +180,19 @@ def main(argv: Sequence[str] | None = None) -> None:
             )
             agent_cfg.max_iterations = max_iterations
             agent_cfg.save_interval = SMOKE_SAVE_INTERVAL
+        elif args.easy:
+            num_envs = args.num_envs if args.num_envs is not None else EASY_NUM_ENVS
+            max_iterations = (
+                args.max_iterations if args.max_iterations is not None else EASY_MAX_ITERATIONS
+            )
+            env_cfg = make_climbing_easy_env_cfg(
+                num_envs=num_envs,
+                seed=args.seed if args.seed != 42 else EASY_SEED,
+                episode_length_s=EASY_EPISODE_LENGTH_S,
+                play=False,
+            )
+            agent_cfg.max_iterations = max_iterations
+            agent_cfg.save_interval = EASY_SAVE_INTERVAL
         else:
             if args.num_envs is not None:
                 env_cfg.scene.num_envs = args.num_envs
