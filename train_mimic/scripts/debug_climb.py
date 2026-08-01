@@ -48,6 +48,11 @@ from pathlib import Path
 
 import torch
 
+from train_mimic.app import resolve_device
+
+
+def _debug_device(requested: str | None) -> str:
+    return resolve_device(requested, torch)
 
 def _print_ladder_state(env, *, header: str) -> None:
     from train_mimic.tasks.climbing.ladder.state import LadderRuntime
@@ -113,7 +118,7 @@ def run_scene_mode(args: argparse.Namespace) -> None:
         ladder_cfg=ladder_cfg,
         env_spacing=args.env_spacing,
     )
-    device = args.device or "cpu"
+    device = _debug_device(args.device)
     env = ManagerBasedRlEnv(cfg=env_cfg, device=device)
     env.reset()
     if args.export_scene is not None:
@@ -212,7 +217,7 @@ def run_contacts_mode(args: argparse.Namespace) -> None:
         seed=args.seed,
         env_spacing=args.env_spacing,
     )
-    device = args.device or "cpu"
+    device = _debug_device(args.device)
     env = ManagerBasedRlEnv(cfg=env_cfg, device=device)
     env.reset()
 
@@ -341,7 +346,7 @@ def run_zero_agent_mode(args: argparse.Namespace) -> None:
         env_spacing=args.env_spacing,
         play=True,
     )
-    device = args.device or "cpu"
+    device = _debug_device(args.device)
     env = ManagerBasedRlEnv(cfg=env_cfg, device=device)
     env.reset()
     summary = run_agent_rollout(
@@ -373,7 +378,7 @@ def run_random_agent_mode(args: argparse.Namespace) -> None:
         env_spacing=args.env_spacing,
         play=True,
     )
-    device = args.device or "cpu"
+    device = _debug_device(args.device)
     env = ManagerBasedRlEnv(cfg=env_cfg, device=device)
     env.reset()
     generator = torch.Generator(device=env.device)
@@ -410,7 +415,7 @@ def run_scripted_hold_mode(args: argparse.Namespace) -> None:
         hold_cfg=hold_cfg,
         env_spacing=args.env_spacing,
     )
-    device = args.device or "cpu"
+    device = _debug_device(args.device)
     env = ManagerBasedRlEnv(cfg=env_cfg, device=device)
     env.reset()
     agent = AssistedHoldScriptedAgent(env.unwrapped, hold_cfg=hold_cfg)
@@ -489,7 +494,7 @@ def run_scripted_mdp_mode(args: argparse.Namespace) -> None:
         env_spacing=args.env_spacing,
         play=True,
     )
-    device = args.device or "cpu"
+    device = _debug_device(args.device)
     env = ManagerBasedRlEnv(cfg=env_cfg, device=device)
     env.reset()
     agent = FullMdpScriptedAgent(env.unwrapped, hold_cfg=hold_cfg)
@@ -574,7 +579,7 @@ def run_reset_stress_mode(args: argparse.Namespace) -> None:
         env_spacing=args.env_spacing,
         play=True,
     )
-    device = args.device or "cpu"
+    device = _debug_device(args.device)
     env = ManagerBasedRlEnv(cfg=env_cfg, device=device)
     env.reset()
 
@@ -659,7 +664,7 @@ def run_hold_pose_mode(args: argparse.Namespace) -> None:
         hold_cfg=hold_cfg,
         env_spacing=args.env_spacing,
     )
-    device = args.device or "cpu"
+    device = _debug_device(args.device)
     env = ManagerBasedRlEnv(cfg=env_cfg, device=device)
     env.reset()
 
@@ -803,7 +808,7 @@ def run_rewards_mode(args: argparse.Namespace) -> None:
         env_spacing=args.env_spacing,
         reward_cfg=reward_cfg,
     )
-    device = args.device or "cpu"
+    device = _debug_device(args.device)
     env = ManagerBasedRlEnv(cfg=env_cfg, device=device)
     env.reset()
 
@@ -905,7 +910,7 @@ def run_observations_mode(args: argparse.Namespace) -> None:
         seed=args.seed,
         env_spacing=args.env_spacing,
     )
-    device = args.device or "cpu"
+    device = _debug_device(args.device)
     env = ManagerBasedRlEnv(cfg=env_cfg, device=device)
     env.reset()
 
@@ -978,7 +983,7 @@ def run_latch_mode(args: argparse.Namespace) -> None:
         env_spacing=args.env_spacing,
         latch_cfg=latch_cfg,
     )
-    device = args.device or "cpu"
+    device = _debug_device(args.device)
     env = ManagerBasedRlEnv(cfg=env_cfg, device=device)
     env.reset()
 
@@ -1194,7 +1199,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=None,
         help="Optional automatic full reset interval in viewer steps (scene mode)",
     )
-    parser.add_argument("--device", type=str, default=None, help="Simulation device (default: cpu)")
+    parser.add_argument(
+        "--device",
+        type=str,
+        default=None,
+        help="Simulation device (default: cuda:0 when CUDA is available, else cpu)",
+    )
     parser.add_argument(
         "--no-debug-vis",
         action="store_true",
