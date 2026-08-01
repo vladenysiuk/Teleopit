@@ -1,6 +1,7 @@
 """Climbing RL package."""
 
 from train_mimic.tasks.climbing.rl.climbing_model import ClimbingModel
+from train_mimic.tasks.climbing.rl.runner import ClimbingOnPolicyRunner
 from train_mimic.tasks.climbing.rl.ladder_encoders import (
     DepthCameraProvider,
     DepthLadderEncoder,
@@ -10,6 +11,7 @@ from train_mimic.tasks.climbing.rl.ladder_encoders import (
 
 __all__ = [
     "ClimbingModel",
+    "ClimbingOnPolicyRunner",
     "DepthCameraProvider",
     "DepthLadderEncoder",
     "NotImplementedDepthCameraProvider",

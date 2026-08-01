@@ -193,7 +193,7 @@ def configure_climbing_observations(
         ),
         "actor_ladder": ObservationGroupCfg(
             terms={"relative_rungs": ladder_term},
-            concatenate_terms=False,
+            concatenate_terms=True,
             enable_corruption=False,
         ),
         "critic_proprio": ObservationGroupCfg(
@@ -210,7 +210,7 @@ def configure_climbing_observations(
         ),
         "critic_ladder": ObservationGroupCfg(
             terms={"relative_rungs": deepcopy(ladder_term)},
-            concatenate_terms=False,
+            concatenate_terms=True,
             enable_corruption=False,
         ),
         "critic_privileged": ObservationGroupCfg(

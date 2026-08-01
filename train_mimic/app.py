@@ -6,11 +6,14 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
+from train_mimic.tasks.climbing.config.constants import SUPPORTED_CLIMBING_TASKS
 from train_mimic.tasks.tracking.config.constants import (
     DEFAULT_TRAIN_MOTION_FILE,
     GENERAL_TRACKING_TASK,
-    SUPPORTED_TASKS,
+    SUPPORTED_TASKS as SUPPORTED_TRACKING_TASKS,
 )
+
+SUPPORTED_TASKS = SUPPORTED_TRACKING_TASKS + SUPPORTED_CLIMBING_TASKS
 from train_mimic.data.dataset_lib import find_precomputed_motion_shards, validate_precomputed_motion_dataset
 
 DEFAULT_TASK = GENERAL_TRACKING_TASK

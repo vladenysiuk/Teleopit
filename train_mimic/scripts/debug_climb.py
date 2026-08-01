@@ -32,11 +32,17 @@ Stage 7 — end-to-end MDP agents and reset stress (no PPO):
     python train_mimic/scripts/debug_climb.py --mode scripted-hold --seed 42
     python train_mimic/scripts/debug_climb.py --mode scripted-mdp --seed 42
     python train_mimic/scripts/debug_climb.py --mode reset-stress --seed 42 --num-resets 50
+
+Stage 8 — tiny PPO smoke test (infrastructure validation, not learnability):
+
+    python train_mimic/scripts/debug_climb.py --mode ppo-smoke --seed 42
+    python train_mimic/scripts/train_climb.py --smoke
 """
 
 from __future__ import annotations
 
 import argparse
+import statistics
 import sys
 from pathlib import Path
 
@@ -1112,6 +1118,44 @@ def run_latch_mode(args: argparse.Namespace) -> None:
         env.close()
 
 
+def run_ppo_smoke_mode(args: argparse.Namespace) -> None:
+    from train_mimic.tasks.climbing.config.smoke import (
+        SMOKE_MAX_ITERATIONS,
+        SMOKE_NUM_ENVS,
+        SMOKE_SAVE_INTERVAL,
+    )
+    from train_mimic.tasks.climbing.ppo_smoke import run_ppo_smoke
+
+    num_envs = args.num_envs if args.num_envs != 1 else SMOKE_NUM_ENVS
+    max_iterations = args.rollout_steps if args.rollout_steps != 120 else SMOKE_MAX_ITERATIONS
+    report = run_ppo_smoke(
+        num_envs=num_envs,
+        max_iterations=max_iterations,
+        save_interval=SMOKE_SAVE_INTERVAL,
+        seed=args.seed,
+        device=args.device,
+    )
+    print("[ppo-smoke] device:", report.device)
+    print("[ppo-smoke] log_dir:", report.log_dir)
+    print("[ppo-smoke] checkpoint:", report.checkpoint_path)
+    print("[ppo-smoke] completed_episodes:", report.completed_episodes)
+    print("[ppo-smoke] reward_variance:", f"{report.reward_variance:.6f}")
+    print("[ppo-smoke] latch_action_std:", f"{report.latch_action_std:.4f}")
+    print("[ppo-smoke] playback_ok:", report.playback_ok)
+    if report.mean_rewards:
+        print("[ppo-smoke] mean_reward:", f"{statistics.mean(report.mean_rewards):.4f}")
+    if report.extra.get("term_means"):
+        terms = report.extra["term_means"]
+        joined = ", ".join(f"{k}={v:.4f}" for k, v in sorted(terms.items()))
+        print("[ppo-smoke] reward_terms:", joined)
+    if report.reward_scale.flagged_terms:
+        print("[ppo-smoke] reward_scale_flags:", ", ".join(report.reward_scale.flagged_terms))
+        for note in report.reward_scale.notes:
+            print("[ppo-smoke] note:", note)
+    if not report.ok:
+        raise SystemExit("[ppo-smoke] smoke report failed exit criteria")
+
+
 def viewer_kwargs_verbosity(verbose: bool) -> int:
     from mjlab.viewer.base import VerbosityLevel
 
@@ -1137,6 +1181,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             "scripted-mdp",
             "scripted",
             "reset-stress",
+            "ppo-smoke",
         ],
         help="Debug mode",
     )
@@ -1267,6 +1312,9 @@ def main(argv: list[str] | None = None) -> None:
         return
     if args.mode == "reset-stress":
         run_reset_stress_mode(args)
+        return
+    if args.mode == "ppo-smoke":
+        run_ppo_smoke_mode(args)
         return
     raise SystemExit(f"Unsupported mode: {args.mode}")
 

@@ -8,6 +8,7 @@ from train_mimic.tasks.climbing.config.constants import (
 )
 from train_mimic.tasks.climbing.config.env import make_general_climbing_env_cfg
 from train_mimic.tasks.climbing.config.rl import make_general_climbing_ppo_runner_cfg
+from train_mimic.tasks.climbing.rl.runner import ClimbingOnPolicyRunner
 
 register_mjlab_task(
     task_id=CLIMBING_TASK_ID,
@@ -16,7 +17,7 @@ register_mjlab_task(
     rl_cfg=make_general_climbing_ppo_runner_cfg(
         experiment_name=CLIMBING_EXPERIMENT_NAME
     ),
-    runner_cls=None,
+    runner_cls=ClimbingOnPolicyRunner,
 )
 
 __all__ = [

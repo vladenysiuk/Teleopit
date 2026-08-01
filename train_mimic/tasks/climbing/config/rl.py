@@ -1,9 +1,4 @@
-"""PPO runner configuration for General-Climbing-G1.
-
-Stage 4 wires the climbing model and observation groups. Full trainable PPO
-integration remains gated to Stage 8; ``max_iterations=1`` keeps registry
-registration safe without implying a production training run.
-"""
+"""PPO runner configuration for General-Climbing-G1."""
 
 from mjlab.rl import RslRlModelCfg, RslRlOnPolicyRunnerCfg, RslRlPpoAlgorithmCfg
 
@@ -77,7 +72,7 @@ def make_general_climbing_ppo_runner_cfg(
         experiment_name=experiment_name,
         save_interval=2000,
         num_steps_per_env=24,
-        max_iterations=1,
+        max_iterations=30_000,
         logger="tensorboard",
         upload_model=False,
     )
