@@ -2,12 +2,25 @@
 """Play back a trained General-Climbing-G1 policy in simulation.
 
 Usage:
+    # Stage 9 easy checkpoint (assisted hold reset + fixed ladder — matches train --easy)
     python train_mimic/scripts/play_climb.py \
-        --checkpoint logs/rsl_rl/g1_general_climbing/<run>/model_100.pt
+        --checkpoint logs/rsl_rl/g1_general_climbing/<run>/model_800.pt \
+        --easy
 
+    # Record headless video (full easy episode by default, saved next to checkpoint)
+    MUJOCO_GL=egl python train_mimic/scripts/play_climb.py \
+        --checkpoint logs/rsl_rl/g1_general_climbing/<run>/model_800.pt \
+        --easy --video --device cuda:0
+
+    # Stage 8 smoke checkpoint (pinned ladder, no curriculum reset)
     python train_mimic/scripts/play_climb.py \
         --checkpoint logs/rsl_rl/g1_general_climbing/<run>/model_100.pt \
-        --viewer viser
+        --smoke-ladder
+
+    # Browser viewer over SSH
+    python train_mimic/scripts/play_climb.py \
+        --checkpoint logs/rsl_rl/g1_general_climbing/<run>/model_800.pt \
+        --easy --viewer viser
 """
 
 from __future__ import annotations
@@ -24,7 +37,29 @@ from train_mimic.app import (
     validate_checkpoint_path,
 )
 from train_mimic.tasks.climbing.config.constants import CLIMBING_TASK_ID
+from train_mimic.tasks.climbing.config.easy import make_climbing_easy_env_cfg
 from train_mimic.tasks.climbing.config.smoke import make_climbing_smoke_env_cfg
+
+
+def resolve_play_video_length(env_cfg, override: int | None) -> int:
+    """Policy steps to record; defaults to one full episode."""
+    if override is not None:
+        return max(1, override)
+    step_dt = env_cfg.decimation * env_cfg.sim.mujoco.timestep
+    return max(1, int(round(env_cfg.episode_length_s / step_dt)))
+
+
+def configure_headless_video_rendering() -> None:
+    """Default EGL for headless rgb_array capture on servers without a display."""
+    if "MUJOCO_GL" not in os.environ:
+        os.environ["MUJOCO_GL"] = "egl"
+        print("[INFO] --video enabled, MUJOCO_GL not set. Defaulting to MUJOCO_GL=egl.")
+    if "PYOPENGL_PLATFORM" not in os.environ:
+        os.environ["PYOPENGL_PLATFORM"] = "egl"
+        print(
+            "[INFO] --video enabled, PYOPENGL_PLATFORM not set. "
+            "Defaulting to PYOPENGL_PLATFORM=egl."
+        )
 
 
 def parse_args() -> argparse.Namespace:
@@ -36,14 +71,40 @@ def parse_args() -> argparse.Namespace:
         type=str,
         default="native",
         choices=["native", "viser"],
+        help="Ignored when --video is set (headless recording).",
     )
-    parser.add_argument("--video", action="store_true")
+    parser.add_argument(
+        "--video",
+        action="store_true",
+        help="Record rgb_array video instead of opening an interactive viewer.",
+    )
+    parser.add_argument(
+        "--video-length",
+        type=int,
+        default=None,
+        help="Policy steps to record (default: one full episode from env cfg).",
+    )
+    parser.add_argument(
+        "--video-folder",
+        type=str,
+        default=None,
+        help="Output directory for mp4 (default: <checkpoint_dir>/videos/play).",
+    )
     parser.add_argument("--device", type=str, default=None)
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument(
+    env_preset = parser.add_mutually_exclusive_group()
+    env_preset.add_argument(
+        "--easy",
+        action="store_true",
+        help=(
+            "Use the Stage 9 easy MDP (fixed ladder, assisted hold reset, hand attach). "
+            "Match train_climb.py --easy checkpoints."
+        ),
+    )
+    env_preset.add_argument(
         "--smoke-ladder",
         action="store_true",
-        help="Use the Stage 8 pinned easy ladder layout (default for smoke checkpoints).",
+        help="Use the Stage 8 smoke ladder (pinned layout, no curriculum reset).",
     )
     return parser.parse_args()
 
@@ -78,7 +139,13 @@ def main() -> None:
         load_runner_cls=_load_runner_cls,
     )
 
-    if args.smoke_ladder:
+    if args.easy:
+        env_cfg = make_climbing_easy_env_cfg(
+            num_envs=args.num_envs,
+            seed=args.seed,
+            play=True,
+        )
+    elif args.smoke_ladder:
         env_cfg = make_climbing_smoke_env_cfg(
             num_envs=args.num_envs,
             seed=args.seed,
@@ -88,6 +155,23 @@ def main() -> None:
         env_cfg.scene.num_envs = args.num_envs
         env_cfg.seed = args.seed
 
+    if args.video and args.num_envs != 1:
+        print("Error: --video requires --num_envs 1")
+        raise SystemExit(1)
+
+    video_length = resolve_play_video_length(env_cfg, args.video_length) if args.video else 0
+    log_dir = os.path.dirname(args.checkpoint)
+    video_folder = args.video_folder or os.path.join(log_dir, "videos", "play")
+
+    if args.video:
+        configure_headless_video_rendering()
+        os.makedirs(video_folder, exist_ok=True)
+        step_dt = env_cfg.decimation * env_cfg.sim.mujoco.timestep
+        print(
+            f"[INFO] Recording {video_length} policy steps "
+            f"({video_length * step_dt:.1f}s) to {video_folder}"
+        )
+
     device = resolve_device(args.device, torch)
     render_mode = "rgb_array" if args.video else None
     env = ManagerBasedRlEnv(cfg=env_cfg, device=device, render_mode=render_mode)
@@ -95,17 +179,15 @@ def main() -> None:
     if args.video:
         from mjlab.utils.wrappers import VideoRecorder
 
-        log_dir = os.path.dirname(args.checkpoint)
         env = VideoRecorder(
             env,
-            video_folder=os.path.join(log_dir, "videos", "play"),
+            video_folder=video_folder,
             step_trigger=lambda step: step == 0,
-            video_length=500,
+            video_length=video_length,
             disable_logger=True,
         )
 
     env = RslRlVecEnvWrapper(env, clip_actions=agent_cfg.clip_actions)
-    log_dir = os.path.dirname(args.checkpoint)
     agent_dict = build_runner_cfg_dict(agent_cfg, force_tensorboard=True)
     RunnerCls = runner_cls or MjlabOnPolicyRunner
     runner = RunnerCls(env, agent_dict, log_dir=log_dir, device=device)
@@ -114,10 +196,11 @@ def main() -> None:
 
     if args.video:
         obs = env.get_observations()
-        for _ in range(500):
+        for _ in range(video_length):
             with torch.no_grad():
                 actions = policy(obs)
             obs, _, _, _ = env.step(actions)
+        print(f"[INFO] Video saved under {video_folder}")
     elif args.viewer == "native":
         NativeMujocoViewer(env, policy).run()
     else:

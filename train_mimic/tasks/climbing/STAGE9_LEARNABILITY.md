@@ -20,6 +20,7 @@ climbing feasibility.
 | `train_mimic/tasks/climbing/debug_hold_pose.py` | Batched noisy hold pose + probabilistic latch seeding |
 | `train_mimic/tasks/climbing/learnability.py` | Zero/random baselines, short train, metric comparison |
 | `train_mimic/scripts/train_climb.py` | `--easy` owner training preset |
+| `train_mimic/scripts/play_climb.py` | Checkpoint playback; use `--easy` for Stage 9 checkpoints |
 | `train_mimic/scripts/debug_climb.py` | `--mode baseline-compare`, `--mode learnability` |
 | `tests/test_climbing_stage9.py` | Curriculum + baseline + CI learnability harness |
 
@@ -72,6 +73,21 @@ python train_mimic/scripts/debug_climb.py --mode learnability --seed 42
 
 # Owner easy training preset (256 envs, 800 iterations)
 python train_mimic/scripts/train_climb.py --easy
+
+# Visual playback of an easy checkpoint (same MDP as train --easy)
+python train_mimic/scripts/play_climb.py \
+  --checkpoint logs/rsl_rl/g1_general_climbing/<run>/model_800.pt \
+  --easy --device cuda:0 --seed 42
+
+# Headless mp4 (full 15 s easy episode → logs/.../videos/play/)
+python train_mimic/scripts/play_climb.py \
+  --checkpoint logs/rsl_rl/g1_general_climbing/<run>/model_800.pt \
+  --easy --video --device cuda:0 --seed 42
+
+# Browser viewer over SSH
+python train_mimic/scripts/play_climb.py \
+  --checkpoint logs/rsl_rl/g1_general_climbing/<run>/model_800.pt \
+  --easy --viewer viser
 ```
 
 ## Pre-run success evidence (owner)

@@ -177,3 +177,35 @@ def test_learnability_experiment_completes() -> None:
 
 def test_easy_defaults_match_owner_plan() -> None:
     assert EASY_NUM_ENVS == 256
+
+
+def test_play_climb_easy_and_smoke_flags_are_mutually_exclusive() -> None:
+    import sys
+    from unittest.mock import patch
+
+    from train_mimic.scripts import play_climb
+
+    with patch.object(
+        sys,
+        "argv",
+        ["play_climb.py", "--checkpoint", "model.pt", "--easy", "--smoke-ladder"],
+    ):
+        with pytest.raises(SystemExit):
+            play_climb.parse_args()
+
+
+def test_easy_env_play_preset_keeps_curriculum_reset() -> None:
+    cfg = make_climbing_easy_env_cfg(num_envs=1, seed=42, play=True)
+    assert "reset_climb_curriculum_pose" in cfg.events
+    curriculum = cfg.events["reset_climb_curriculum_pose"].params["curriculum_cfg"]
+    assert curriculum.initial_hand_attach_prob == 1.0
+    assert not cfg.observations["actor_proprio"].enable_corruption
+
+
+def test_play_climb_video_length_defaults_to_full_easy_episode() -> None:
+    pytest.importorskip("mjlab")
+    from train_mimic.scripts.play_climb import resolve_play_video_length
+
+    cfg = make_climbing_easy_env_cfg(num_envs=1, seed=42, play=True)
+    assert resolve_play_video_length(cfg, None) == 750
+    assert resolve_play_video_length(cfg, 120) == 120
