@@ -36,9 +36,7 @@ import argparse
 import contextlib
 import os
 import signal
-import subprocess
 import sys
-import time
 from datetime import datetime
 from typing import Any, Sequence
 
@@ -48,6 +46,23 @@ from train_mimic.app import (
     import_training_stack,
     load_task_components,
     validate_motion_file,
+)
+from train_mimic.distributed_launch import (
+    add_multi_gpu_arguments,
+    build_launcher_env as _build_launcher_env,
+    build_torchrun_command as _build_torchrun_command,
+    destroy_process_group as _destroy_process_group,
+    filtered_argv_for_worker as _filtered_argv_for_worker,
+    is_distributed_env as _is_distributed_env,
+    is_main_process as _is_main_process,
+    launch_multi_gpu as _launch_multi_gpu,
+    normalize_multi_gpu_args,
+    resolve_distributed_device as _resolve_device,
+    resolve_worker_seed as _resolve_worker_seed,
+    should_launch_multi_gpu as _should_launch_multi_gpu,
+    terminate_worker_group as _terminate_worker_group,
+    validate_multi_gpu_args as _validate_multi_gpu_args,
+    wait_process as _wait_process,
 )
 from train_mimic.tasks.tracking.config.constants import DEFAULT_TRAIN_MOTION_FILE
 from train_mimic.tasks.tracking.config.env import (
@@ -107,22 +122,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--rewind_max_steps", type=int, default=None,
                         help="Maximum policy steps to rewind for rewind sampling")
     parser.add_argument("--device", type=str, default=None)
-    parser.add_argument(
-        "--gpu_ids",
-        type=int,
-        nargs="+",
-        default=None,
-        help=(
-            "Single-node multi-GPU launch helper. Example: --gpu_ids 0 1 2 3. "
-            "When multiple IDs are provided, this script relaunches itself via torchrun."
-        ),
-    )
-    parser.add_argument(
-        "--master_port",
-        type=int,
-        default=29500,
-        help="Master port for internal torchrun launch when using --gpu_ids (default: 29500)",
-    )
+    add_multi_gpu_arguments(parser)
     parser.add_argument("--video", action="store_true",
                         help="Record periodic videos during training")
     parser.add_argument("--task", type=str, default=DEFAULT_TASK,
@@ -132,134 +132,6 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--video_length", type=int, default=200,
                         help="Number of steps per video clip (default: 200)")
     return parser.parse_args(argv)
-
-
-def _is_distributed_env(env: dict[str, str] | None = None) -> bool:
-    runtime_env = os.environ if env is None else env
-    return int(runtime_env.get("WORLD_SIZE", "1")) > 1
-
-
-def _should_launch_multi_gpu(args: argparse.Namespace, env: dict[str, str] | None = None) -> bool:
-    gpu_ids = list(args.gpu_ids or [])
-    return len(gpu_ids) > 1 and not _is_distributed_env(env)
-
-
-def _validate_multi_gpu_args(args: argparse.Namespace) -> None:
-    gpu_ids = list(args.gpu_ids or [])
-    if len(gpu_ids) != len(set(gpu_ids)):
-        raise ValueError(f"--gpu_ids contains duplicates: {gpu_ids}")
-    if any(gpu_id < 0 for gpu_id in gpu_ids):
-        raise ValueError(f"--gpu_ids must be non-negative, got {gpu_ids}")
-    if args.master_port <= 0:
-        raise ValueError(f"--master_port must be positive, got {args.master_port}")
-
-
-def _filtered_argv_for_worker(argv: Sequence[str]) -> list[str]:
-    filtered: list[str] = []
-    skip_gpu_id_values = False
-    skip_next_value = False
-    for token in argv:
-        if skip_gpu_id_values:
-            if token.startswith("-"):
-                skip_gpu_id_values = False
-            else:
-                continue
-        if skip_next_value:
-            skip_next_value = False
-            continue
-
-        if token == "--gpu_ids":
-            skip_gpu_id_values = True
-            continue
-        if token.startswith("--gpu_ids="):
-            continue
-        if token == "--master_port":
-            skip_next_value = True
-            continue
-        if token.startswith("--master_port="):
-            continue
-
-        filtered.append(token)
-    return filtered
-
-
-def _build_torchrun_command(args: argparse.Namespace, argv: Sequence[str]) -> list[str]:
-    gpu_ids = list(args.gpu_ids or [])
-    if len(gpu_ids) <= 1:
-        raise ValueError("multi-GPU launch requires at least two gpu ids")
-
-    worker_argv = _filtered_argv_for_worker(argv)
-    return [
-        "torchrun",
-        "--standalone",
-        f"--nproc_per_node={len(gpu_ids)}",
-        f"--master_port={args.master_port}",
-        *worker_argv,
-    ]
-
-
-def _build_launcher_env(args: argparse.Namespace, env: dict[str, str] | None = None) -> dict[str, str]:
-    runtime_env = dict(os.environ if env is None else env)
-    gpu_ids = list(args.gpu_ids or [])
-    runtime_env["CUDA_VISIBLE_DEVICES"] = ",".join(str(gpu_id) for gpu_id in gpu_ids)
-    return runtime_env
-
-
-def _wait_process(proc: subprocess.Popen[bytes], timeout_s: float) -> bool:
-    deadline = time.monotonic() + timeout_s
-    while time.monotonic() < deadline:
-        if proc.poll() is not None:
-            return True
-        time.sleep(0.1)
-    return proc.poll() is not None
-
-
-def _terminate_worker_group(proc: subprocess.Popen[bytes]) -> None:
-    if proc.poll() is not None:
-        return
-
-    with contextlib.suppress(ProcessLookupError):
-        os.killpg(proc.pid, signal.SIGINT)
-    if _wait_process(proc, timeout_s=5.0):
-        return
-
-    with contextlib.suppress(ProcessLookupError):
-        os.killpg(proc.pid, signal.SIGTERM)
-    if _wait_process(proc, timeout_s=5.0):
-        return
-
-    with contextlib.suppress(ProcessLookupError):
-        os.killpg(proc.pid, signal.SIGKILL)
-    _wait_process(proc, timeout_s=2.0)
-
-
-def _resolve_device(args: argparse.Namespace, torch_module: object) -> str:
-    if _is_distributed_env():
-        local_rank = int(os.environ.get("LOCAL_RANK", "0"))
-        expected_device = f"cuda:{local_rank}"
-        if args.device is not None and args.device != expected_device:
-            raise ValueError(
-                f"Distributed worker must use device '{expected_device}' for LOCAL_RANK={local_rank}, "
-                f"got '{args.device}'. Remove --device or set it to the local-rank device."
-            )
-        return expected_device
-
-    if args.device is not None:
-        return args.device
-    return "cuda:0" if torch_module.cuda.is_available() else "cpu"
-
-
-def _resolve_worker_seed(base_seed: int, env: dict[str, str] | None = None) -> int:
-    runtime_env = os.environ if env is None else env
-    if not _is_distributed_env(runtime_env):
-        return base_seed
-    global_rank = int(runtime_env.get("RANK", "0"))
-    return base_seed + global_rank * 100003
-
-
-def _is_main_process(env: dict[str, str] | None = None) -> bool:
-    runtime_env = os.environ if env is None else env
-    return int(runtime_env.get("RANK", "0")) == 0
 
 
 def _configure_experiment_logger(
@@ -311,36 +183,6 @@ def _configure_experiment_logger(
     )
     swanlab.sync_tensorboard_torch(types=["scalar", "scalars", "image", "text"])
     return True
-
-
-def _launch_multi_gpu(args: argparse.Namespace, argv: Sequence[str]) -> None:
-    _validate_multi_gpu_args(args)
-    command = _build_torchrun_command(args, argv)
-    env = _build_launcher_env(args)
-    print(
-        f"[INFO] Launching multi-GPU training on GPUs {list(args.gpu_ids or [])} "
-        f"with {args.num_envs} envs/GPU"
-    )
-    proc = subprocess.Popen(command, env=env, start_new_session=True)
-    try:
-        return_code = proc.wait()
-    except KeyboardInterrupt:
-        print("[INFO] KeyboardInterrupt received, stopping distributed workers...")
-        _terminate_worker_group(proc)
-        raise SystemExit(130)
-
-    if return_code != 0:
-        raise subprocess.CalledProcessError(return_code, command)
-
-
-def _destroy_process_group(torch_module: Any) -> None:
-    distributed = getattr(torch_module, "distributed", None)
-    if distributed is None or not distributed.is_available():
-        return
-    if not distributed.is_initialized():
-        return
-    with contextlib.suppress(Exception):
-        distributed.destroy_process_group()
 
 
 def _run_worker(args: argparse.Namespace) -> None:
@@ -405,7 +247,7 @@ def _run_worker(args: argparse.Namespace) -> None:
     if args.experiment_name is not None:
         agent_cfg.experiment_name = args.experiment_name
 
-    device = _resolve_device(args, torch)
+    device = _resolve_device(args.device, torch)
 
     # Log directory (defined before env creation so video path is available)
     log_root = os.path.abspath(os.path.join("logs", "rsl_rl", agent_cfg.experiment_name))
@@ -474,8 +316,13 @@ def main(argv: Sequence[str] | None = None) -> None:
     parse_argv = cli_argv[1:]
     args = parse_args(parse_argv)
 
+    if _should_launch_multi_gpu(args) or getattr(args, "all_gpus", False):
+        import torch
+
+        normalize_multi_gpu_args(args, torch)
+
     if _should_launch_multi_gpu(args):
-        _launch_multi_gpu(args, cli_argv)
+        _launch_multi_gpu(args, cli_argv, num_envs=args.num_envs)
         return
 
     _run_worker(args)

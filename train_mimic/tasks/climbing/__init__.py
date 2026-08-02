@@ -1,7 +1,7 @@
-"""General-Climbing-G1 task package (staged implementation).
+"""General-Climbing-G1 task package.
 
-Stage 1: ladder spec, sampling, scene debug env.
-Stage 2: G1 integration, hand contact identity, task registration.
+Staged implementation (Stages 0–10). See ``train_mimic/tasks/climbing/README.md``
+and ``STAGE10_HANDOFF.md`` for documentation and validation commands.
 """
 
 from train_mimic.tasks.climbing.config.constants import (

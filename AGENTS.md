@@ -75,9 +75,13 @@ train_mimic/              # Training package
 │   ├── runner.py         # Training runner and policy ONNX export wrapper
 │   ├── conv1d_encoder.py # 1-D CNN encoder for temporal history groups
 │   └── temporal_cnn_model.py # TemporalCNN actor/critic model
+├── tasks/climbing/       # General-Climbing-G1 (ladder RL; see STAGE10_HANDOFF.md)
 └── scripts/
-    ├── train.py          # Training entry point
-    ├── play.py           # Checkpoint playback
+    ├── train.py          # Tracking training entry point
+    ├── train_climb.py    # Climbing training entry point
+    ├── debug_climb.py    # Climbing staged debug modes
+    ├── play.py           # Tracking checkpoint playback
+    ├── play_climb.py     # Climbing checkpoint playback
     ├── benchmark.py      # Policy evaluation with tracking errors
     └── save_onnx.py      # Export TemporalCNN ONNX
 ```
@@ -195,8 +199,11 @@ Runtime constraints:
 - `RLPolicyController` accepts dual-input `obs` + `obs_history` ONNX
 - Startup validates the observation definition against the ONNX signature and raises immediately on mismatch
 
-### Training Task
-The single supported training task is `General-Tracking-G1` (experiment name: `g1_general_tracking`).
+### Training Tasks
+
+#### General-Tracking-G1 (teleoperation / motion tracking)
+
+Experiment name: `g1_general_tracking`. Default task for `train_mimic/scripts/train.py`.
 
 - Uses TemporalCNN actor/critic with scaled dims (2048,1024,512,256,128)
 - 167D `velcmd_history` observation, dual-input ONNX export
@@ -206,6 +213,19 @@ The single supported training task is `General-Tracking-G1` (experiment name: `g
 - Playback/benchmark use `play=True`, which switches motion sampling to `start`
 - `window_steps=[0]`
 - `save_onnx.py` exports dual-input TemporalCNN ONNX
+
+#### General-Climbing-G1 (ladder climbing RL)
+
+Experiment name: `g1_general_climbing`. Separate task; does **not** share the 167D tracking ONNX contract.
+
+- Procedurally sampled fixed-topology ladder with pure cylindrical rungs
+- Actions: 29 joint positions + 2 latch attach/detach commands
+- Observations: separated proprioception/history, contact/latch state, privileged relative-rung ladder exteroception (K=6); depth mode has encoder hook only
+- Rewards read simulator task state (not actor observations)
+- Documentation: `docs/docs/tutorials/climbing.md`, `reference/climbing-simulator.md`, `reference/climbing-rl.md`
+- Debug: `python train_mimic/scripts/debug_climb.py --mode <scene|contacts|latch|...>`
+- Train: `python train_mimic/scripts/train_climb.py --smoke|--easy`
+- Regression: `python scripts/dev/run_climbing_regression.py`
 
 ### Dataset Pipeline
 - Dataset build spec supports a `preprocess` section for root-xy normalization, ground alignment, and basic clip filtering

@@ -62,6 +62,16 @@ python train_mimic/scripts/train.py \
     --motion_file data/datasets_precomputed
 ```
 
+Or use every visible GPU on the node:
+
+```bash
+python train_mimic/scripts/train.py \
+    --all_gpus \
+    --num_envs 1024 \
+    --max_iterations 30000 \
+    --motion_file data/datasets_precomputed
+```
+
 ### Multi-Node Multi-GPU
 
 Use `torchrun` directly when training across multiple machines:
@@ -98,6 +108,8 @@ python train_mimic/scripts/save_onnx.py \
 ```
 
 The exported model is a dual-input ONNX (`obs` + `obs_history`). The inference side expects a 167D dual-input ONNX policy matching the current `velcmd_history` observation.
+
+For the separate **G1 ladder climbing** task (`General-Climbing-G1`), see [G1 Ladder Climbing](./climbing).
 
 ## Evaluation
 

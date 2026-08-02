@@ -5,6 +5,16 @@ Usage:
     # Stage 8 infrastructure smoke (64 envs, 100 iterations, fixed easy ladder)
     python train_mimic/scripts/train_climb.py --smoke
 
+    # Stage 9 easy learnability preset (256 envs/GPU, 800 iterations)
+    python train_mimic/scripts/train_climb.py --easy
+
+    # Single-node multi-GPU (num_envs is per GPU; 4x A100 -> 1024 total with 256/GPU)
+    python train_mimic/scripts/train_climb.py --easy \
+        --gpu_ids 0 1 2 3 --num_envs 256
+
+    # Or use every visible GPU
+    python train_mimic/scripts/train_climb.py --easy --all_gpus --num_envs 256
+
     # Custom run
     python train_mimic/scripts/train_climb.py \
         --num_envs 4096 --max_iterations 30000
@@ -30,8 +40,17 @@ from train_mimic.app import (
     build_runner_cfg_dict,
     import_training_stack,
     load_task_components,
-    resolve_device,
     validate_checkpoint_path,
+)
+from train_mimic.distributed_launch import (
+    add_multi_gpu_arguments,
+    destroy_process_group,
+    is_main_process,
+    launch_multi_gpu,
+    normalize_multi_gpu_args,
+    resolve_distributed_device,
+    resolve_worker_seed,
+    should_launch_multi_gpu,
 )
 from train_mimic.tasks.climbing.config.constants import (
     CLIMBING_EXPERIMENT_NAME,
@@ -69,6 +88,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--experiment_name", type=str, default=None)
     parser.add_argument("--resume", type=str, default=None)
     parser.add_argument("--device", type=str, default=None)
+    add_multi_gpu_arguments(parser)
     parser.add_argument(
         "--smoke",
         action="store_true",
@@ -82,7 +102,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help=(
             "Stage 9 easy learnability preset: assisted hold start, both hands "
-            "attached, fixed ladder, 256 envs, 800 iterations."
+            "attached, fixed ladder, 256 envs/GPU, 800 iterations."
         ),
     )
     return parser.parse_args(argv)
@@ -106,6 +126,9 @@ def _configure_experiment_logger(
         raise ValueError(f"Unsupported logger '{logger_name}'")
 
     agent_cfg.logger = "tensorboard"
+    if not is_main_process():
+        return False
+
     try:
         import swanlab
     except ModuleNotFoundError as exc:
@@ -129,8 +152,43 @@ def _configure_experiment_logger(
     return True
 
 
-def main(argv: Sequence[str] | None = None) -> None:
-    args = parse_args(argv)
+def _build_env_cfg(args: argparse.Namespace) -> tuple[Any, int, int | None, int | None, int]:
+    """Return env_cfg, num_envs, max_iterations, save_interval, base_seed."""
+    if args.smoke:
+        num_envs = args.num_envs if args.num_envs is not None else SMOKE_NUM_ENVS
+        max_iterations = (
+            args.max_iterations if args.max_iterations is not None else SMOKE_MAX_ITERATIONS
+        )
+        seed = args.seed if args.seed != 42 else SMOKE_SEED
+        env_cfg = make_climbing_smoke_env_cfg(
+            num_envs=num_envs,
+            seed=seed,
+            episode_length_s=SMOKE_EPISODE_LENGTH_S,
+            play=False,
+        )
+        return env_cfg, num_envs, max_iterations, SMOKE_SAVE_INTERVAL, seed
+
+    if args.easy:
+        num_envs = args.num_envs if args.num_envs is not None else EASY_NUM_ENVS
+        max_iterations = (
+            args.max_iterations if args.max_iterations is not None else EASY_MAX_ITERATIONS
+        )
+        seed = args.seed if args.seed != 42 else EASY_SEED
+        env_cfg = make_climbing_easy_env_cfg(
+            num_envs=num_envs,
+            seed=seed,
+            episode_length_s=EASY_EPISODE_LENGTH_S,
+            play=False,
+        )
+        return env_cfg, num_envs, max_iterations, EASY_SAVE_INTERVAL, seed
+
+    _task_name, env_cfg, _agent_cfg, _runner_cls = load_task_components(CLIMBING_TASK_ID)
+    num_envs = args.num_envs if args.num_envs is not None else env_cfg.scene.num_envs
+    env_cfg.scene.num_envs = num_envs
+    return env_cfg, num_envs, args.max_iterations, None, args.seed
+
+
+def _run_worker(args: argparse.Namespace) -> None:
     (
         torch,
         ManagerBasedRlEnv,
@@ -144,12 +202,14 @@ def main(argv: Sequence[str] | None = None) -> None:
 
     env: Any | None = None
     swanlab_active = False
+    rank = os.environ.get("RANK", "0")
 
     def _handle_shutdown(signum: int, _frame: Any) -> None:
-        print(f"[INFO] Received signal {signum}, shutting down...")
+        print(f"[INFO] Rank {rank} received signal {signum}, shutting down...")
         if env is not None:
             with contextlib.suppress(Exception):
                 env.close()
+        destroy_process_group(torch)
         raise KeyboardInterrupt
 
     old_sigint = signal.getsignal(signal.SIGINT)
@@ -160,52 +220,31 @@ def main(argv: Sequence[str] | None = None) -> None:
     try:
         configure_torch_backends()
 
-        _task_name, env_cfg, agent_cfg, runner_cls = load_task_components(
+        _task_name, _base_env_cfg, agent_cfg, runner_cls = load_task_components(
             CLIMBING_TASK_ID,
             load_env_cfg=load_env_cfg,
             load_rl_cfg=load_rl_cfg,
             load_runner_cls=load_runner_cls,
         )
 
-        if args.smoke:
-            num_envs = args.num_envs if args.num_envs is not None else SMOKE_NUM_ENVS
-            max_iterations = (
-                args.max_iterations if args.max_iterations is not None else SMOKE_MAX_ITERATIONS
-            )
-            env_cfg = make_climbing_smoke_env_cfg(
-                num_envs=num_envs,
-                seed=args.seed if args.seed != 42 else SMOKE_SEED,
-                episode_length_s=SMOKE_EPISODE_LENGTH_S,
-                play=False,
-            )
-            agent_cfg.max_iterations = max_iterations
-            agent_cfg.save_interval = SMOKE_SAVE_INTERVAL
-        elif args.easy:
-            num_envs = args.num_envs if args.num_envs is not None else EASY_NUM_ENVS
-            max_iterations = (
-                args.max_iterations if args.max_iterations is not None else EASY_MAX_ITERATIONS
-            )
-            env_cfg = make_climbing_easy_env_cfg(
-                num_envs=num_envs,
-                seed=args.seed if args.seed != 42 else EASY_SEED,
-                episode_length_s=EASY_EPISODE_LENGTH_S,
-                play=False,
-            )
-            agent_cfg.max_iterations = max_iterations
-            agent_cfg.save_interval = EASY_SAVE_INTERVAL
-        else:
-            if args.num_envs is not None:
-                env_cfg.scene.num_envs = args.num_envs
-            if args.max_iterations is not None:
-                agent_cfg.max_iterations = args.max_iterations
+        env_cfg, num_envs, preset_max_iters, preset_save_interval, base_seed = _build_env_cfg(args)
+        env_cfg.seed = resolve_worker_seed(base_seed)
 
-        env_cfg.seed = args.seed
+        if preset_max_iters is not None:
+            agent_cfg.max_iterations = preset_max_iters
+        elif args.max_iterations is not None:
+            agent_cfg.max_iterations = args.max_iterations
+
+        if preset_save_interval is not None:
+            agent_cfg.save_interval = preset_save_interval
+
         if args.experiment_name is not None:
             agent_cfg.experiment_name = args.experiment_name
         elif agent_cfg.experiment_name != CLIMBING_EXPERIMENT_NAME:
             agent_cfg.experiment_name = CLIMBING_EXPERIMENT_NAME
 
-        device = resolve_device(args.device, torch)
+        device = resolve_distributed_device(args.device, torch)
+
         log_root = os.path.abspath(os.path.join("logs", "rsl_rl", agent_cfg.experiment_name))
         os.makedirs(log_root, exist_ok=True)
         log_dir = os.path.join(log_root, datetime.now().strftime("%Y-%m-%d_%H-%M-%S"))
@@ -237,8 +276,8 @@ def main(argv: Sequence[str] | None = None) -> None:
             )
         else:
             print(
-                f"[INFO] Starting {CLIMBING_TASK_ID}: "
-                f"{env_cfg.scene.num_envs} envs, {agent_cfg.max_iterations} iterations"
+                f"[INFO] Starting {CLIMBING_TASK_ID} rank {rank}: "
+                f"{num_envs} envs/GPU, {agent_cfg.max_iterations} iterations, device={device}"
             )
 
         start = time.time()
@@ -247,9 +286,10 @@ def main(argv: Sequence[str] | None = None) -> None:
             init_at_random_ep_len=True,
         )
         elapsed = time.time() - start
-        print(f"[INFO] Training finished in {elapsed:.1f}s. Logs: {log_dir}")
+        if is_main_process():
+            print(f"[INFO] Training finished in {elapsed:.1f}s. Logs: {log_dir}")
     except KeyboardInterrupt:
-        print("[INFO] Interrupted; exiting gracefully.")
+        print(f"[INFO] Rank {rank} interrupted; exiting gracefully.")
     finally:
         if env is not None:
             with contextlib.suppress(Exception):
@@ -259,8 +299,25 @@ def main(argv: Sequence[str] | None = None) -> None:
                 import swanlab
 
                 swanlab.finish()
+        destroy_process_group(torch)
         signal.signal(signal.SIGINT, old_sigint)
         signal.signal(signal.SIGTERM, old_sigterm)
+
+
+def main(argv: Sequence[str] | None = None) -> None:
+    cli_argv = list(sys.argv if argv is None else argv)
+    args = parse_args(cli_argv[1:])
+
+    if should_launch_multi_gpu(args) or getattr(args, "all_gpus", False):
+        import torch
+
+        normalize_multi_gpu_args(args, torch)
+
+    if should_launch_multi_gpu(args):
+        launch_multi_gpu(args, cli_argv, num_envs=args.num_envs)
+        return
+
+    _run_worker(args)
 
 
 if __name__ == "__main__":

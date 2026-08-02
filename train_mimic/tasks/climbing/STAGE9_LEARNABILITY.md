@@ -126,6 +126,7 @@ time-to-progress — not a single cherry-picked episode.
 - Stage 9 does not tune reward weights; address `invalid_latch` dominance via
   curriculum (guaranteed attach) before weight changes.
 
-## Next stage
+## Handoff
 
-Stage 10 — documentation, regression suite, and handoff.
+Stage 10 complete — see [STAGE10_HANDOFF.md](STAGE10_HANDOFF.md) and
+[README.md](README.md) for the consolidated guide and regression command.

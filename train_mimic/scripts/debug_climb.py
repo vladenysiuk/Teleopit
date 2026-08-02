@@ -43,6 +43,13 @@ Stage 9 — easy learnability baselines and short experiment:
     python train_mimic/scripts/debug_climb.py --mode baseline-compare --seed 42
     python train_mimic/scripts/debug_climb.py --mode learnability --seed 42
     python train_mimic/scripts/train_climb.py --easy
+
+Stage 10 — full regression suite:
+
+    python scripts/dev/run_climbing_regression.py
+    python scripts/dev/run_climbing_regression.py --quick   # skip long PPO/GPU tests
+
+See train_mimic/tasks/climbing/STAGE10_HANDOFF.md for the complete handoff guide.
 """
 
 from __future__ import annotations

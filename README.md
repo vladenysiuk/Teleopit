@@ -108,6 +108,31 @@ sync metadata in the HDF5 episode. The low-dimensional HDF5 schema records
 reference qpos sent to the policy path, and `action.hand(12)` as the latest
 LinkerHand left/right 6D pose commands.
 
+## G1 Ladder Climbing (Training)
+
+`General-Climbing-G1` is a separate mjlab RL task for MuJoCo ladder climbing.
+It does not replace or alter the tracking ONNX contract.
+
+```bash
+pip install -e ".[train]"
+python scripts/setup/download_assets.py --only robots
+
+# Automated regression (all climbing stage tests)
+python scripts/dev/run_climbing_regression.py
+
+# Interactive validation
+mjpython train_mimic/scripts/debug_climb.py --mode scene --seed 42
+
+# Training
+python train_mimic/scripts/train_climb.py --easy
+```
+
+Full documentation: **[BotRunner64.github.io/Teleopit/tutorials/climbing](https://BotRunner64.github.io/Teleopit/tutorials/climbing)**
+
+- [Tutorial](docs/docs/tutorials/climbing.md) — usage
+- [Simulator reference](docs/docs/reference/climbing-simulator.md) — ladder, contacts, latch
+- [RL reference](docs/docs/reference/climbing-rl.md) — rewards, PPO, curriculum
+
 ## Documentation
 
 Full docs at **[BotRunner64.github.io/Teleopit](https://BotRunner64.github.io/Teleopit/)**, covering installation profiles, all tutorials, configuration reference, and architecture.

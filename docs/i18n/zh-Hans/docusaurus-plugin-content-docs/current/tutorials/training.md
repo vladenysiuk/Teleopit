@@ -61,6 +61,16 @@ python train_mimic/scripts/train.py \
     --motion_file data/datasets_precomputed
 ```
 
+或使用当前节点上所有可见 GPU：
+
+```bash
+python train_mimic/scripts/train.py \
+    --all_gpus \
+    --num_envs 1024 \
+    --max_iterations 30000 \
+    --motion_file data/datasets_precomputed
+```
+
 ### 多机多卡训练
 
 跨多台机器训练时，直接使用 `torchrun`：
@@ -97,6 +107,8 @@ python train_mimic/scripts/save_onnx.py \
 ```
 
 导出的模型为双输入 ONNX（`obs` + `obs_history`）。推理端需要与当前 `velcmd_history` 观测匹配的 167D 双输入 ONNX 策略。
+
+独立的 **G1 爬梯**任务（`General-Climbing-G1`）请参阅 [G1 爬梯训练](./climbing)。
 
 ## 评估
 

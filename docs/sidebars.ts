@@ -22,6 +22,7 @@ const sidebars: SidebarsConfig = {
         'tutorials/pico-sim2real',
         'tutorials/bvh-sim2real',
         'tutorials/training',
+        'tutorials/climbing',
       ],
     },
     {
@@ -38,6 +39,8 @@ const sidebars: SidebarsConfig = {
       label: 'Reference',
       items: [
         'reference/architecture',
+        'reference/climbing-simulator',
+        'reference/climbing-rl',
         'reference/assets',
         'reference/dataset',
         'reference/g1-bridge-sdk',

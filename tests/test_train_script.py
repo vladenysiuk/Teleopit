@@ -44,6 +44,7 @@ def _args(**overrides: object) -> argparse.Namespace:
         "rewind_max_steps": None,
         "device": None,
         "gpu_ids": None,
+        "all_gpus": False,
         "master_port": 29500,
         "video": False,
         "video_interval": 2000,
@@ -79,6 +80,15 @@ class TestTrainLauncherHelpers:
         args = _args(gpu_ids=[0, 1, 2, 3])
         assert train._should_launch_multi_gpu(args, env={"WORLD_SIZE": "1"}) is True
         assert train._should_launch_multi_gpu(args, env={"WORLD_SIZE": "4"}) is False
+
+    def test_should_launch_multi_gpu_with_all_gpus(self) -> None:
+        args = _args(all_gpus=True)
+        assert train._should_launch_multi_gpu(args, env={"WORLD_SIZE": "1"}) is True
+
+    def test_parse_args_with_all_gpus(self) -> None:
+        args = train.parse_args(["--all_gpus", "--num_envs", "256"])
+        assert args.all_gpus is True
+        assert args.gpu_ids is None
 
     def test_validate_multi_gpu_args_rejects_duplicates(self) -> None:
         with pytest.raises(ValueError, match="duplicates"):
@@ -123,13 +133,13 @@ class TestTrainLauncherHelpers:
     def test_resolve_device_defaults_to_local_rank_in_distributed_mode(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("WORLD_SIZE", "4")
         monkeypatch.setenv("LOCAL_RANK", "2")
-        assert train._resolve_device(_args(), _TorchStub()) == "cuda:2"
+        assert train._resolve_device(None, _TorchStub()) == "cuda:2"
 
     def test_resolve_device_rejects_wrong_distributed_device(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("WORLD_SIZE", "4")
         monkeypatch.setenv("LOCAL_RANK", "1")
         with pytest.raises(ValueError, match="LOCAL_RANK=1"):
-            train._resolve_device(_args(device="cuda:0"), _TorchStub())
+            train._resolve_device("cuda:0", _TorchStub())
 
     def test_resolve_worker_seed_offsets_by_global_rank(self) -> None:
         assert train._resolve_worker_seed(42, env={"WORLD_SIZE": "4", "RANK": "0"}) == 42
@@ -228,9 +238,10 @@ class TestTrainLauncherHelpers:
     def test_main_uses_launcher_branch(self, monkeypatch: pytest.MonkeyPatch) -> None:
         called: dict[str, object] = {}
 
-        def fake_launch(args: argparse.Namespace, argv: list[str]) -> None:
+        def fake_launch(args: argparse.Namespace, argv: list[str], *, num_envs: int | None = None) -> None:
             called["gpu_ids"] = args.gpu_ids
             called["argv"] = argv
+            called["num_envs"] = num_envs
 
         def fake_worker(args: argparse.Namespace) -> None:
             raise AssertionError("worker should not run in launcher branch")
@@ -243,6 +254,7 @@ class TestTrainLauncherHelpers:
         assert called == {
             "gpu_ids": [0, 1],
             "argv": ["train.py", "--gpu_ids", "0", "1", "--num_envs", "1024"],
+            "num_envs": 1024,
         }
 
 
