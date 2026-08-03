@@ -39,6 +39,11 @@ def validate_checkpoint_path(checkpoint_path: str) -> None:
 
 
 def import_training_stack() -> tuple[Any, ...]:
+    # Patch mujoco_warp before mjlab imports it (Warp codegen reads sensor.py).
+    from train_mimic.warp_patches import apply_mujoco_warp_sensor_patches
+
+    apply_mujoco_warp_sensor_patches()
+
     import torch
 
     import mjlab.tasks  # noqa: F401 -- populates mjlab built-in tasks

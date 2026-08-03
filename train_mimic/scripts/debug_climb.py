@@ -1359,6 +1359,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 def main(argv: list[str] | None = None) -> None:
+    from train_mimic.warp_patches import apply_mujoco_warp_sensor_patches
+
+    apply_mujoco_warp_sensor_patches()
     args = parse_args(argv)
     if args.mode == "scene":
         run_scene_mode(args)

@@ -36,6 +36,11 @@ import time
 from datetime import datetime
 from typing import Any, Sequence
 
+from train_mimic.warp_patches import apply_mujoco_warp_sensor_patches
+
+# Before any mjlab / mujoco_warp import via app helpers.
+apply_mujoco_warp_sensor_patches()
+
 from train_mimic.app import (
     build_runner_cfg_dict,
     import_training_stack,

@@ -223,6 +223,7 @@ Experiment name: `g1_general_climbing`. Separate task; does **not** share the 16
 - Hand latches are MuJoCo `connect` equalities with default `break_force=500` N (equality `efc.force`, checked every physics substep) and softened `solref=(0.05, 1.0)`; an unbreakable stiff connect is an infinite-strength weld to the kinematic ladder and can slingshot the free base
 - Observations: separated proprioception/history, contact/latch state, privileged relative-rung ladder exteroception (K=6); depth mode has encoder hook only
 - Rewards read simulator task state (not actor observations)
+- `train_mimic.warp_patches` patches mujoco_warp 3.8.x `_frame_axis` UNKNOWN (`undefined symbol: xmat`) before mjlab import; applied by `import_training_stack()` and climbing entry points
 - Documentation: `docs/docs/tutorials/climbing.md`, `reference/climbing-simulator.md`, `reference/climbing-rl.md`
 - Debug: `python train_mimic/scripts/debug_climb.py --mode <scene|contacts|latch|...>`
 - Train: `python train_mimic/scripts/train_climb.py --smoke|--easy`

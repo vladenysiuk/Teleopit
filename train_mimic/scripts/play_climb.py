@@ -28,6 +28,10 @@ from __future__ import annotations
 import argparse
 import os
 
+from train_mimic.warp_patches import apply_mujoco_warp_sensor_patches
+
+apply_mujoco_warp_sensor_patches()
+
 from mjlab.viewer import NativeMujocoViewer, ViserPlayViewer
 from train_mimic.app import (
     build_runner_cfg_dict,
