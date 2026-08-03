@@ -3,6 +3,10 @@
 Per-step indicators use mjlab ``reduce="mean"`` / ``"last"``. Running maxima
 are class-based terms (mjlab MetricsTermCfg has no ``reduce="max"`` yet).
 Stateful counters that rewards already maintain are reported with ``last``.
+
+``time_to_success`` keeps a per-env ``-1`` sentinel until first success, but
+episode logging averages **successful envs only** (see
+``install_time_to_success_success_only_aggregation``).
 """
 
 from __future__ import annotations
@@ -19,6 +23,68 @@ from train_mimic.tasks.climbing.mdp.terminations import climbing_success_predica
 if TYPE_CHECKING:
     from mjlab.envs import ManagerBasedRlEnv
     from mjlab.managers.metrics_manager import MetricsTermCfg
+
+_TTS_SUCCESS_ONLY_ATTR = "_teleopit_tts_success_only_reset"
+TIME_TO_SUCCESS_TERM = "time_to_success"
+TIME_TO_SUCCESS_LOG_KEY = f"Episode_Metrics/{TIME_TO_SUCCESS_TERM}"
+
+
+def mean_successful_time_to_success(values: torch.Tensor) -> torch.Tensor:
+    """Mean steps-to-success over entries with ``value >= 0``; NaN if none."""
+    flat = values.reshape(-1).to(dtype=torch.float32)
+    ok = flat >= 0
+    if not bool(ok.any().item()):
+        return torch.tensor(float("nan"), device=flat.device, dtype=torch.float32)
+    return flat[ok].mean()
+
+
+def correct_mean_time_to_success(
+    contaminated_mean: float, success_rate: float, *, failure_sentinel: float = -1.0
+) -> float:
+    """Recover success-only mean from a mean that included ``failure_sentinel``.
+
+    ``t' = (t - (1 - sr) * sentinel) / sr``. Returns NaN when ``sr == 0``.
+    """
+    if success_rate <= 0.0:
+        return float("nan")
+    return (contaminated_mean - (1.0 - success_rate) * failure_sentinel) / success_rate
+
+
+def install_time_to_success_success_only_aggregation(env: ManagerBasedRlEnv) -> None:
+    """Patch metrics reset so ``Episode_Metrics/time_to_success`` ignores failures.
+
+    mjlab ``MetricsManager.reset`` does ``mean(_step_values[env_ids])`` for
+    ``reduce="last"``. Unsuccessful envs still hold the ``-1`` sentinel, which
+    pulls the logged mean down. Replace that scalar with the mean over
+    successful envs only; omit the key when a reset batch has no successes.
+    """
+    mgr = getattr(env, "metrics_manager", None)
+    if mgr is None or not hasattr(mgr, "active_terms"):
+        return
+    if TIME_TO_SUCCESS_TERM not in mgr.active_terms:
+        return
+    if getattr(mgr, _TTS_SUCCESS_ONLY_ATTR, False):
+        return
+
+    original_reset = mgr.reset
+
+    def reset(env_ids: torch.Tensor | slice | None = None) -> dict[str, torch.Tensor]:
+        if env_ids is None:
+            env_ids = slice(None)
+        idx = mgr.active_terms.index(TIME_TO_SUCCESS_TERM)
+        vals = mgr._step_values[env_ids, idx].detach().clone()
+        extras = original_reset(env_ids)
+        if TIME_TO_SUCCESS_LOG_KEY not in extras:
+            return extras
+        reduced = mean_successful_time_to_success(vals)
+        if torch.isfinite(reduced).item():
+            extras[TIME_TO_SUCCESS_LOG_KEY] = reduced
+        else:
+            extras.pop(TIME_TO_SUCCESS_LOG_KEY, None)
+        return extras
+
+    mgr.reset = reset  # type: ignore[method-assign]
+    setattr(mgr, _TTS_SUCCESS_ONLY_ATTR, True)
 
 
 def _actuator_torque_saturated(env: ManagerBasedRlEnv, *, rtol: float = 0.98) -> torch.Tensor:
@@ -109,5 +175,9 @@ def episode_success(
 
 
 def time_to_success_steps(env: ManagerBasedRlEnv) -> torch.Tensor:
-    """Steps until first success, or ``-1`` if not yet successful ``[B]``."""
+    """Steps until first success, or ``-1`` if not yet successful ``[B]``.
+
+    Per-env sentinel remains ``-1`` for debugging. Logged episode aggregates use
+    successful envs only via ``install_time_to_success_success_only_aggregation``.
+    """
     return ClimbRewardState.get(env).time_to_success_steps.to(dtype=torch.float32)

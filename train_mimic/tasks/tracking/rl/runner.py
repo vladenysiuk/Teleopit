@@ -39,6 +39,33 @@ def _format_duration(seconds: float) -> str:
     return f"{hours:02d}:{minutes:02d}:{secs:02d}"
 
 
+def _aggregate_ep_extra_values(key: str, values: torch.Tensor) -> torch.Tensor:
+    """Aggregate one episode-extra key across reset events in an iteration.
+
+    ``Episode_Termination/*`` values are per-reset-batch counts from mjlab, so
+    they must be summed into an integer total. Other extras are episode scalars
+    and keep the historical mean reduction.
+    """
+    if values.numel() == 0:
+        return values.new_zeros(())
+    if key.startswith("Episode_Termination/"):
+        return torch.sum(values)
+    return torch.mean(values)
+
+
+def _ep_extras_keys(ep_extras: list) -> list[str]:
+    """Stable union of keys across reset-event dicts (first-seen order)."""
+    keys: list[str] = []
+    seen: set[str] = set()
+    for ep_info in ep_extras:
+        for key in ep_info:
+            if key in seen:
+                continue
+            seen.add(key)
+            keys.append(key)
+    return keys
+
+
 class MotionTrackingOnPolicyRunner(MjlabOnPolicyRunner):
     env: RslRlVecEnvWrapper
 
@@ -141,7 +168,7 @@ class MotionTrackingOnPolicyRunner(MjlabOnPolicyRunner):
 
         extras_string = ""
         if logger.ep_extras:
-            for key in logger.ep_extras[0]:
+            for key in _ep_extras_keys(logger.ep_extras):
                 infotensor = torch.tensor([], device=logger.device)
                 for ep_info in logger.ep_extras:
                     if key not in ep_info:
@@ -151,10 +178,14 @@ class MotionTrackingOnPolicyRunner(MjlabOnPolicyRunner):
                     if len(ep_info[key].shape) == 0:
                         ep_info[key] = ep_info[key].unsqueeze(0)
                     infotensor = torch.cat((infotensor, ep_info[key].to(logger.device)))
-                value = torch.mean(infotensor)
+                value = _aggregate_ep_extra_values(key, infotensor)
                 if "/" in key:
                     logger.writer.add_scalar(key, value, it)  # type: ignore[arg-type]
-                    extras_string += f"""{f"{key}:":>{pad}} {value:.4f}
+                    if key.startswith("Episode_Termination/"):
+                        extras_string += f"""{f"{key}:":>{pad}} {value.item():.0f}
+"""
+                    else:
+                        extras_string += f"""{f"{key}:":>{pad}} {value:.4f}
 """
                 else:
                     logger.writer.add_scalar("Episode/" + key, value, it)  # type: ignore[arg-type]

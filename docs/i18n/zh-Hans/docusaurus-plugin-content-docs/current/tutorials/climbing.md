@@ -98,14 +98,23 @@ tensorboard --logdir logs/rsl_rl/g1_general_climbing
 ## 回放
 
 ```bash
+# Easy checkpoint（与 train --easy MDP 一致）
 python train_mimic/scripts/play_climb.py \
     --checkpoint logs/rsl_rl/g1_general_climbing/<run>/model_800.pt \
-    --easy --device cuda:0
+    --easy --device cuda:0 --seed 42
 
+# 无头多 seed mp4（默认 8 次复位采样拼成一条视频，30% 速度）
 MUJOCO_GL=egl python train_mimic/scripts/play_climb.py \
     --checkpoint logs/rsl_rl/g1_general_climbing/<run>/model_800.pt \
-    --easy --video --device cuda:0
+    --easy --video --seed 42
+
+# SSH 浏览器 viewer
+python train_mimic/scripts/play_climb.py \
+    --checkpoint logs/rsl_rl/g1_general_climbing/<run>/model_800.pt \
+    --easy --viewer viser
 ```
+
+`--video` 会把 `--video-clips` 次复位（默认 `8`，seed 为 `seed..seed+clips-1`）拼成单个 Full HD（`1920x1080`）`play_climb.mp4`，保存在 `<checkpoint_dir>/videos/play/`。每个 clip 默认一整局，可用 `--video-length` 覆盖。播放默认 `--video-speed 0.3`（实时的 30%）。未加 `--easy` 且课程随机化开启时，每次复位也会重采样梯子布局。
 
 ## 自动化测试
 

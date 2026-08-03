@@ -9,6 +9,7 @@ from typing import Any
 import torch
 from rsl_rl.utils import check_nan
 
+from train_mimic.tasks.climbing.mdp.metrics import TIME_TO_SUCCESS_LOG_KEY
 from train_mimic.tasks.tracking.rl.runner import (
     MotionTrackingOnPolicyRunner,
     _one_based_iteration_range,
@@ -35,6 +36,31 @@ class ClimbingOnPolicyRunner(MotionTrackingOnPolicyRunner):
         self._iter_reward_terms = {}
         self._iter_latch_actions = []
         self._iter_nonfinite_steps = 0
+
+    def _collapse_time_to_success_ep_extras(self) -> None:
+        """Collapse success-only TTS batch means so parent logging stays finite.
+
+        Reset batches with no successes omit ``Episode_Metrics/time_to_success``.
+        The tracking logger only iterates keys from ``ep_extras[0]``, so fold all
+        finite TTS batch means into a single entry on the first extras dict.
+        """
+        logger = self.logger
+        if not logger.ep_extras:
+            return
+        values: list[float] = []
+        for ep_info in logger.ep_extras:
+            if TIME_TO_SUCCESS_LOG_KEY not in ep_info:
+                continue
+            raw = ep_info.pop(TIME_TO_SUCCESS_LOG_KEY)
+            tensor = torch.as_tensor(raw, dtype=torch.float32).reshape(-1)
+            if tensor.numel() == 0 or not bool(torch.isfinite(tensor).all().item()):
+                continue
+            values.append(float(tensor.mean().item()))
+        if not values:
+            return
+        logger.ep_extras[0][TIME_TO_SUCCESS_LOG_KEY] = torch.tensor(
+            [sum(values) / len(values)], dtype=torch.float32
+        )
 
     def _accumulate_step_diagnostics(
         self,
@@ -161,6 +187,7 @@ class ClimbingOnPolicyRunner(MotionTrackingOnPolicyRunner):
             self.current_learning_iteration = it
 
             self._log_climbing_diagnostics(it)
+            self._collapse_time_to_success_ep_extras()
             self._log_one_based_iteration(
                 it=it,
                 start_it=start_it,

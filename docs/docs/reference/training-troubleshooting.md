@@ -17,7 +17,7 @@ For training workflow, see [Training Tutorial](../tutorials/training). For data 
 ### Symptoms
 
 - `Mean episode length: 1.00`
-- `Episode_Termination/anchor_pos` near total parallel environment count
+- `Episode_Termination/anchor_pos` dominates completed-episode counts (near `num_envs × num_steps_per_env` when every env dies every policy step)
 - `Metrics/motion/error_anchor_pos` > 0.5 m
 - `Metrics/motion/error_body_rot` very large (close to pi)
 

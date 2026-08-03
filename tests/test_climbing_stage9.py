@@ -209,3 +209,39 @@ def test_play_climb_video_length_defaults_to_full_easy_episode() -> None:
     cfg = make_climbing_easy_env_cfg(num_envs=1, seed=42, play=True)
     assert resolve_play_video_length(cfg, None) == 750
     assert resolve_play_video_length(cfg, 120) == 120
+
+
+def test_play_climb_video_fps_uses_requested_playback_speed() -> None:
+    from train_mimic.scripts.play_climb import (
+        DEFAULT_VIDEO_CLIPS,
+        DEFAULT_VIDEO_SPEED,
+        resolve_video_fps,
+    )
+
+    # Easy policy rate is 50 Hz; 30% speed → 15 fps.
+    assert DEFAULT_VIDEO_SPEED == 0.3
+    assert DEFAULT_VIDEO_CLIPS == 8
+    assert resolve_video_fps(0.02, 0.3) == 15.0
+    assert resolve_video_fps(0.02, 1.0) == 50.0
+
+
+def test_play_climb_video_cli_defaults() -> None:
+    import sys
+    from unittest.mock import patch
+
+    from train_mimic.scripts import play_climb
+
+    with patch.object(
+        sys,
+        "argv",
+        ["play_climb.py", "--checkpoint", "model.pt", "--easy", "--video"],
+    ):
+        args = play_climb.parse_args()
+    assert args.video is True
+    assert args.video_clips == play_climb.DEFAULT_VIDEO_CLIPS
+    assert args.video_speed == play_climb.DEFAULT_VIDEO_SPEED
+    assert args.video_width == play_climb.DEFAULT_VIDEO_WIDTH
+    assert args.video_height == play_climb.DEFAULT_VIDEO_HEIGHT
+    assert args.video_width == 1920
+    assert args.video_height == 1080
+    assert args.seed == 42

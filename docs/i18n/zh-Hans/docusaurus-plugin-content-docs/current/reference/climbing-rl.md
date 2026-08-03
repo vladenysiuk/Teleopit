@@ -55,7 +55,7 @@ ClimbingOnPolicyRunner → rsl_rl PPO（分项 RewardTerm 日志）
 | `invalid_latch_count` | 无效附着请求次数 |
 | `success` | 成功标志 |
 | `hand_contact_fraction` | 手接触均值 |
-| `time_to_success` | 首次成功步数（未成功为 −1） |
+| `time_to_success` | 首次成功步数，仅对成功回合取平均（环境内哨兵值仍为 −1；无成功的 reset 批次不记录该指标） |
 | `torque_saturation_fraction` | 力矩饱和均值 |
 
 ## PPO 默认
@@ -90,7 +90,7 @@ python train_mimic/scripts/train_climb.py --easy --all_gpus --num_envs 128
 
 ## 回放
 
-`play_climb.py --easy` 须与训练 `--easy` MDP 一致。
+`play_climb.py --easy` 须与训练 `--easy` MDP 一致。支持 native viewer、Viser（SSH）与无头 `--video`（EGL）。视频模式默认将多次 reseed 拼成一条 Full HD mp4，并以 30% 速度播放（`--video-clips 8`，`--video-speed 0.3`，`1920x1080`）。
 
 ## 测试
 

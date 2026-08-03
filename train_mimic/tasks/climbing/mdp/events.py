@@ -127,6 +127,11 @@ def attach_climb_reward_state(
     del env_ids, progress_body
     if ClimbRewardState.EXTRA_KEY not in env.extras:
         ClimbRewardState.attach(env)
+    from train_mimic.tasks.climbing.mdp.metrics import (
+        install_time_to_success_success_only_aggregation,
+    )
+
+    install_time_to_success_success_only_aggregation(env)
 
 
 def reset_climb_reward_state(

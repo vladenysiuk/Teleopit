@@ -581,3 +581,43 @@ def test_configure_climbing_rewards_respects_optional_overload() -> None:
     )
     assert "latch_overload" in cfg.rewards
     assert "latch_overload" in cfg.terminations
+
+
+def test_mean_successful_time_to_success_ignores_failure_sentinel() -> None:
+    import math
+
+    from train_mimic.tasks.climbing.mdp.metrics import (
+        correct_mean_time_to_success,
+        mean_successful_time_to_success,
+    )
+
+    values = torch.tensor([-1.0, 100.0, -1.0, 200.0])
+    assert float(mean_successful_time_to_success(values).item()) == pytest.approx(150.0)
+    assert math.isnan(float(mean_successful_time_to_success(torch.tensor([-1.0, -1.0])).item()))
+
+    contaminated = float(values.mean().item())
+    success_rate = float((values >= 0).float().mean().item())
+    assert correct_mean_time_to_success(contaminated, success_rate) == pytest.approx(150.0)
+    assert math.isnan(correct_mean_time_to_success(contaminated, 0.0))
+
+def test_time_to_success_episode_metric_averages_successful_only(
+    reward_cfg: ClimbingRewardConfig,
+) -> None:
+    pytest.importorskip("mjlab")
+    env = _make_rewards_env(reward_cfg=reward_cfg, num_envs=4)
+    base = env.unwrapped
+    mgr = base.metrics_manager
+    assert "time_to_success" in mgr.active_terms
+    idx = mgr.active_terms.index("time_to_success")
+    mgr._step_values[:, idx] = torch.tensor([-1.0, 100.0, -1.0, 200.0], device=base.device)
+    mgr._step_count[:] = 1
+    extras = mgr.reset(torch.arange(4, device=base.device))
+    key = "Episode_Metrics/time_to_success"
+    assert key in extras
+    assert float(extras[key].item()) == pytest.approx(150.0)
+
+    mgr._step_values[:, idx] = torch.tensor([-1.0, -1.0, -1.0, -1.0], device=base.device)
+    mgr._step_count[:] = 1
+    extras = mgr.reset(torch.arange(4, device=base.device))
+    assert key not in extras
+    env.close()

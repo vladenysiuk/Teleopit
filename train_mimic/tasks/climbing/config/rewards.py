@@ -23,14 +23,14 @@ class ClimbingRewardConfig:
     # Head proxy: G1 29-DoF XML has no head body; d435i_link is the camera frame
     # at head height. Rewarding pelvis height pays for inverted salting.
     progress_body: str = "d435i_link"
-    upward_progress_weight: float = 10.0
-    new_attachment_weight: float = 2.0
-    success_weight: float = 20.0
+    upward_progress_weight: float = 2.0
+    new_attachment_weight: float = 10.0
+    success_weight: float = 50.0
     # Success is relative to the sampled ladder: goal = top_rung_h - clearance.
     # Clearance applies to ``progress_body`` (head), not pelvis.
     success_pelvis_clearance_below_top_l: float = 0.15
     success_top_attach_margin_l: float = 0.05
-    success_min_attached_hands: int = 1
+    success_min_attached_hands: int = 2
     attachment_height_eps: float = 1.0e-4
     time_penalty_coeff: float = 0.05
     action_rate_weight: float = 0.01
@@ -139,6 +139,8 @@ def configure_climbing_rewards(
 
     # mjlab MetricsTermCfg supports reduce in {"mean", "last"} only; running
     # maxima use a class-based term reported with reduce="last".
+    # time_to_success keeps a per-env -1 sentinel; episode logging averages
+    # successful envs only (see install_time_to_success_success_only_aggregation).
     cfg.metrics = {
         "max_head_height_l": MetricsTermCfg(
             func=climb_metrics.max_head_height_l,

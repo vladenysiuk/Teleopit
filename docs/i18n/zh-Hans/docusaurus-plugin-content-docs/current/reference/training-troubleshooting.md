@@ -17,7 +17,7 @@ sidebar_position: 5
 ### 现象
 
 - `Mean episode length: 1.00`
-- `Episode_Termination/anchor_pos` 接近并行环境总数
+- `Episode_Termination/anchor_pos` 在已完成回合计数中占主导（若每个策略步所有环境都终止，则接近 `num_envs × num_steps_per_env`）
 - `Metrics/motion/error_anchor_pos` > 0.5 m
 - `Metrics/motion/error_body_rot` 很大（接近 pi）
 

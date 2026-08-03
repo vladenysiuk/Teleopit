@@ -164,16 +164,18 @@ python train_mimic/scripts/play_climb.py \
     --checkpoint logs/rsl_rl/g1_general_climbing/<run>/model_800.pt \
     --easy --device cuda:0 --seed 42
 
-# Headless mp4 (full episode)
+# Headless multi-seed mp4 (8 reset samples → one video at 30% speed)
 MUJOCO_GL=egl python train_mimic/scripts/play_climb.py \
     --checkpoint logs/rsl_rl/g1_general_climbing/<run>/model_800.pt \
-    --easy --video --device cuda:0
+    --easy --video --seed 42
 
 # Browser viewer over SSH
 python train_mimic/scripts/play_climb.py \
     --checkpoint logs/rsl_rl/g1_general_climbing/<run>/model_800.pt \
     --easy --viewer viser
 ```
+
+`--video` concatenates `--video-clips` reseeds (default `8`, seeds `seed..seed+clips-1`) into a single Full HD (`1920x1080`) `play_climb.mp4` under `<checkpoint_dir>/videos/play/`. Each clip is one full episode unless you pass `--video-length`. Playback defaults to `--video-speed 0.3` (30% of realtime). Without `--easy`, each reseed also resamples ladder layout when curriculum randomization is enabled.
 
 Smoke-ladder playback (Stage 8 checkpoints, no curriculum reset):
 

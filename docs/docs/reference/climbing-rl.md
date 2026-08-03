@@ -70,9 +70,9 @@ All weights live in `ClimbingRewardConfig` (`config/rewards.py`). Functions in `
 
 | Term | Default weight | Semantics |
 |------|---------------:|-----------|
-| `upward_progress` | +10.0 | Head (`d435i_link`) **ladder-relative** height delta (not pelvis/hand; pelvis pays for inverted salting) |
-| `new_higher_attachment` | +2.0 | One-off event per new higher rung attachment |
-| `success` | +20.0 | Head above top rung − clearance with min attached hands |
+| `upward_progress` | +2.0 | Head (`d435i_link`) **ladder-relative** height delta (not pelvis/hand; pelvis pays for inverted salting) |
+| `new_higher_attachment` | +10.0 | One-off event per new higher rung attachment |
+| `success` | +50.0 | Head above top rung − clearance with min attached hands |
 | `time_penalty` | −0.05 × dt | Physical-time cost while not successful |
 | `action_rate` | −0.01 | L2 on action delta |
 | `effort` | −1.0e-4 | Joint torque L2 |
@@ -91,7 +91,7 @@ Optional `latch_overload` penalty/termination exists but defaults **off**.
 Success predicate (configurable via `ClimbingRewardConfig`):
 
 - Head (`d435i_link`) ladder-relative height ≥ top rung − `success_pelvis_clearance_below_top_l` (default 0.15 m).
-- At least `success_min_attached_hands` (default 1) with attachment near ladder top.
+- At least `success_min_attached_hands` (default 2) with attachment near ladder top.
 
 ## Terminations
 
@@ -115,7 +115,7 @@ Logged via `metrics_manager` (`mdp/metrics.py`):
 | `invalid_latch_count` | Invalid attach requests |
 | `success` | Episode success flag |
 | `hand_contact_fraction` | Mean hand contact indicator |
-| `time_to_success` | Steps to success (−1 if none) |
+| `time_to_success` | Steps to first success, averaged over successful episodes only (per-env sentinel remains −1 until success; batches with no successes omit the metric) |
 | `torque_saturation_fraction` | Mean torque saturation indicator |
 
 ## PPO configuration
@@ -125,6 +125,8 @@ Logged via `metrics_manager` (`mdp/metrics.py`):
 - `RewardTerm/{name}` scalars each iteration
 - `Policy/latch_action_{mean,std,abs_mean}`
 - `ObsNorm/*` from actor/ladder normalizers
+- `Episode_Metrics/time_to_success` averaged over successful episodes only
+- `Episode_Termination/*` summed per iteration (mjlab emits per-reset counts; averaging them produced fractional totals)
 
 **Defaults** (`config/rl.py`):
 
@@ -234,7 +236,7 @@ Owner validation: multi-seed videos, attachment sequences, foot contact/slip —
 | `--easy` | Same as `train_climb.py --easy` |
 | `--smoke-ladder` | Pinned ladder, no curriculum reset |
 
-Supports native viewer, Viser (SSH), and headless `--video` (EGL).
+Supports native viewer, Viser (SSH), and headless `--video` (EGL). Video mode concatenates multiple reseeds into one Full HD mp4 at 30% playback speed by default (`--video-clips 8`, `--video-speed 0.3`, `1920x1080`).
 
 ## Smoke / reward-scale diagnosis
 
