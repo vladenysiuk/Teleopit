@@ -106,7 +106,7 @@ def test_compare_learnability_detects_improvement() -> None:
         agent="zero",
         steps=100,
         completed_episodes=1,
-        max_pelvis_height_l=0.5,
+        max_head_height_l=0.5,
         max_valid_higher_attachments=0,
         max_invalid_latch=10,
         invalid_latch_per_step=0.1,
@@ -117,7 +117,7 @@ def test_compare_learnability_detects_improvement() -> None:
         agent="random",
         steps=100,
         completed_episodes=1,
-        max_pelvis_height_l=0.55,
+        max_head_height_l=0.55,
         max_valid_higher_attachments=0,
         max_invalid_latch=20,
         invalid_latch_per_step=0.2,
@@ -128,7 +128,7 @@ def test_compare_learnability_detects_improvement() -> None:
         agent="trained",
         steps=100,
         completed_episodes=1,
-        max_pelvis_height_l=0.62,
+        max_head_height_l=0.62,
         max_valid_higher_attachments=1,
         max_invalid_latch=5,
         invalid_latch_per_step=0.05,
@@ -137,7 +137,7 @@ def test_compare_learnability_detects_improvement() -> None:
     )
     cmp = compare_learnability(zero=zero, random=random, trained=trained)
     assert cmp.learning_signal
-    assert cmp.pelvis_height_gain_vs_zero > 0.0
+    assert cmp.head_height_gain_vs_zero > 0.0
     assert cmp.attachment_gain_vs_zero == 1
 
 

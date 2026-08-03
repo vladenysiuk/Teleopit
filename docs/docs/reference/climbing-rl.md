@@ -70,9 +70,9 @@ All weights live in `ClimbingRewardConfig` (`config/rewards.py`). Functions in `
 
 | Term | Default weight | Semantics |
 |------|---------------:|-----------|
-| `upward_progress` | +10.0 | Pelvis **ladder-relative** height delta (not hand height) |
+| `upward_progress` | +10.0 | Head (`d435i_link`) **ladder-relative** height delta (not pelvis/hand; pelvis pays for inverted salting) |
 | `new_higher_attachment` | +2.0 | One-off event per new higher rung attachment |
-| `success` | +20.0 | Pelvis above top rung − clearance with min attached hands |
+| `success` | +20.0 | Head above top rung − clearance with min attached hands |
 | `time_penalty` | −0.05 × dt | Physical-time cost while not successful |
 | `action_rate` | −0.01 | L2 on action delta |
 | `effort` | −1.0e-4 | Joint torque L2 |
@@ -90,7 +90,7 @@ Optional `latch_overload` penalty/termination exists but defaults **off**.
 
 Success predicate (configurable via `ClimbingRewardConfig`):
 
-- Pelvis ladder-relative height ≥ top rung − `success_pelvis_clearance_below_top_l` (default 0.15 m).
+- Head (`d435i_link`) ladder-relative height ≥ top rung − `success_pelvis_clearance_below_top_l` (default 0.15 m).
 - At least `success_min_attached_hands` (default 1) with attachment near ladder top.
 
 ## Terminations
@@ -109,7 +109,8 @@ Logged via `metrics_manager` (`mdp/metrics.py`):
 
 | Metric | Description |
 |--------|-------------|
-| `max_pelvis_height_l` | Running max pelvis ladder-relative height |
+| `max_head_height_l` | Running max head / progress-body ladder-relative height (`d435i_link` by default) |
+| `head_height_l` | Current head / progress-body ladder-relative height |
 | `valid_higher_attachments` | Count of valid higher attachment events |
 | `invalid_latch_count` | Invalid attach requests |
 | `success` | Episode success flag |
@@ -218,7 +219,7 @@ python train_mimic/scripts/train_climb.py --easy --all_gpus --num_envs 128
 
 1. Roll out **zero** and **random** baselines on easy env.
 2. Train short PPO run (CI: 12 iters).
-3. Compare max pelvis height and valid higher attachments.
+3. Compare max head height and valid higher attachments.
 
 `learning_signal` is true when trained policy beats either baseline on those metrics.
 

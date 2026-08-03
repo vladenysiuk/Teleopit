@@ -38,7 +38,7 @@ def reward_cfg() -> ClimbingRewardConfig:
 
 def _success_params(reward_cfg: ClimbingRewardConfig) -> dict:
     return {
-        "body_name": "pelvis",
+        "body_name": reward_cfg.progress_body,
         "pelvis_clearance_below_top_l": reward_cfg.success_pelvis_clearance_below_top_l,
         "top_attach_margin_l": reward_cfg.success_top_attach_margin_l,
         "min_attached_hands": reward_cfg.success_min_attached_hands,
@@ -143,7 +143,10 @@ def test_general_climbing_env_has_reward_terms(reward_cfg: ClimbingRewardConfig)
     assert "_step_recorder" not in cfg.rewards
     assert "success" in cfg.terminations
     assert "fall" in cfg.terminations
-    assert "max_pelvis_height_l" in cfg.metrics
+    assert "max_head_height_l" in cfg.metrics
+    assert "head_height_l" in cfg.metrics
+    assert "max_pelvis_height_l" not in cfg.metrics
+    assert "pelvis_height_l" not in cfg.metrics
     assert "hand_contact_fraction" in cfg.metrics
 
 
@@ -166,7 +169,7 @@ def test_pelvis_rise_gives_exact_progress(reward_cfg: ClimbingRewardConfig) -> N
 
     state = ClimbRewardState.get(env.unwrapped)
     h0 = body_ladder_relative_height(env.unwrapped, body_name="pelvis")
-    state.max_rewarded_pelvis_height_l[:] = h0
+    state.max_rewarded_progress_height_l[:] = h0
     target = h0 + 0.1
     _set_pelvis_ladder_height(env, float(target[0].item()))
     progress = climb_rewards.upward_progress(env.unwrapped, body_name="pelvis")
@@ -184,7 +187,7 @@ def test_rise_fall_rise_below_max_pays_nothing(reward_cfg: ClimbingRewardConfig)
 
     state = ClimbRewardState.get(env.unwrapped)
     h0 = float(body_ladder_relative_height(env.unwrapped, body_name="pelvis")[0].item())
-    state.max_rewarded_pelvis_height_l[:] = h0
+    state.max_rewarded_progress_height_l[:] = h0
     _set_pelvis_ladder_height(env, h0 + 0.12)
     first = climb_rewards.upward_progress(env.unwrapped, body_name="pelvis")
     assert float(first[0].item()) > 0.0
@@ -201,11 +204,11 @@ def test_hand_rise_alone_gives_zero_progress(reward_cfg: ClimbingRewardConfig) -
     env = _make_rewards_env(reward_cfg=reward_cfg)
     state = ClimbRewardState.get(env.unwrapped)
     climb_rewards.upward_progress(env.unwrapped, body_name="pelvis")
-    anchor = state.max_rewarded_pelvis_height_l.clone()
+    anchor = state.max_rewarded_progress_height_l.clone()
     _set_hand_height_only(env, delta_l=0.15)
     progress = climb_rewards.upward_progress(env.unwrapped, body_name="pelvis")
     assert float(progress[0].item()) == pytest.approx(0.0, abs=1e-4)
-    assert torch.allclose(state.max_rewarded_pelvis_height_l, anchor, atol=1e-4)
+    assert torch.allclose(state.max_rewarded_progress_height_l, anchor, atol=1e-4)
     env.close()
 
 
@@ -345,7 +348,7 @@ def test_event_magnitudes_invariant_under_step_dt(reward_cfg: ClimbingRewardConf
 
         state = ClimbRewardState.get(env.unwrapped)
         h0 = body_ladder_relative_height(env.unwrapped, body_name="pelvis")
-        state.max_rewarded_pelvis_height_l[:] = h0
+        state.max_rewarded_progress_height_l[:] = h0
         _set_pelvis_ladder_height(env, float((h0 + 0.1)[0].item()))
         progress = climb_rewards.upward_progress(env.unwrapped, body_name="pelvis")
         latch = ClimbLatchState.get(env.unwrapped)
@@ -466,13 +469,13 @@ def test_success_attainable_on_short_and_tall_ladders(
 def test_partial_reset_clears_only_selected_envs(reward_cfg: ClimbingRewardConfig) -> None:
     env = _make_rewards_env(num_envs=2, reward_cfg=reward_cfg)
     state = ClimbRewardState.get(env.unwrapped)
-    state.max_rewarded_pelvis_height_l[:] = torch.tensor([1.1, 1.2])
+    state.max_rewarded_progress_height_l[:] = torch.tensor([1.1, 1.2])
     state.max_rewarded_attachment_height_l[:] = torch.tensor([0.4, 0.5])
     state.valid_higher_attachment_count[:] = torch.tensor([2, 3])
     state.invalid_latch_count[:] = torch.tensor([1, 4])
     state.success_rewarded[:] = torch.tensor([True, True])
     state.reset(env.unwrapped, torch.tensor([1], dtype=torch.int64), progress_body="pelvis")
-    assert float(state.max_rewarded_pelvis_height_l[0].item()) == pytest.approx(1.1)
+    assert float(state.max_rewarded_progress_height_l[0].item()) == pytest.approx(1.1)
     assert float(state.max_rewarded_attachment_height_l[0].item()) == pytest.approx(0.4)
     assert int(state.valid_higher_attachment_count[0].item()) == 2
     assert int(state.invalid_latch_count[0].item()) == 1
@@ -526,7 +529,7 @@ def test_reward_manager_matches_manual_sum(reward_cfg: ClimbingRewardConfig) -> 
     env = _make_rewards_env(reward_cfg=reward_cfg)
     # Snapshot state so both paths see identical memory before mutation.
     state = ClimbRewardState.get(env.unwrapped)
-    max_pelvis = state.max_rewarded_pelvis_height_l.clone()
+    max_pelvis = state.max_rewarded_progress_height_l.clone()
     max_attach = state.max_rewarded_attachment_height_l.clone()
     success_flag = state.success_rewarded.clone()
     invalid_armed = state.invalid_latch_armed.clone()
@@ -542,7 +545,7 @@ def test_reward_manager_matches_manual_sum(reward_cfg: ClimbingRewardConfig) -> 
         manual += raw * float(term_cfg.weight) * dt
 
     # Restore memory mutated by the manual pass, then use the manager.
-    state.max_rewarded_pelvis_height_l[:] = max_pelvis
+    state.max_rewarded_progress_height_l[:] = max_pelvis
     state.max_rewarded_attachment_height_l[:] = max_attach
     state.success_rewarded[:] = success_flag
     state.invalid_latch_armed[:] = invalid_armed

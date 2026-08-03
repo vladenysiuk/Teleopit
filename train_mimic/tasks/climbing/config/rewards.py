@@ -20,11 +20,14 @@ from train_mimic.tasks.climbing.mdp import terminations as climb_terminations
 class ClimbingRewardConfig:
     """Numeric parameters and reward-term weights for General-Climbing-G1."""
 
-    progress_body: str = "pelvis"
+    # Head proxy: G1 29-DoF XML has no head body; d435i_link is the camera frame
+    # at head height. Rewarding pelvis height pays for inverted salting.
+    progress_body: str = "d435i_link"
     upward_progress_weight: float = 10.0
     new_attachment_weight: float = 2.0
     success_weight: float = 20.0
     # Success is relative to the sampled ladder: goal = top_rung_h - clearance.
+    # Clearance applies to ``progress_body`` (head), not pelvis.
     success_pelvis_clearance_below_top_l: float = 0.15
     success_top_attach_margin_l: float = 0.05
     success_min_attached_hands: int = 1
@@ -137,13 +140,13 @@ def configure_climbing_rewards(
     # mjlab MetricsTermCfg supports reduce in {"mean", "last"} only; running
     # maxima use a class-based term reported with reduce="last".
     cfg.metrics = {
-        "max_pelvis_height_l": MetricsTermCfg(
-            func=climb_metrics.max_pelvis_height_l,
+        "max_head_height_l": MetricsTermCfg(
+            func=climb_metrics.max_head_height_l,
             reduce="last",
             params=dict(metric_body_params),
         ),
-        "pelvis_height_l": MetricsTermCfg(
-            func=climb_metrics.pelvis_height_l,
+        "head_height_l": MetricsTermCfg(
+            func=climb_metrics.head_height_l,
             reduce="last",
             params=dict(metric_body_params),
         ),

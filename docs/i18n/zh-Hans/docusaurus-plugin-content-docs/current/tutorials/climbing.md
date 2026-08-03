@@ -117,7 +117,7 @@ pytest tests/test_climbing_stage*.py -v
 ## 已知限制
 
 - 尚无生产级深度相机；v1 使用 privileged 相对横档几何。
-- 仅仿真验证，非 sim2real 部署承诺。
+- 仅仿真验证，非 sim2real 部署承诺。点手球与 `connect` 锁扣是 MuJoCo 抽象；训练默认使用 **500 N** 过载断开与软化 `solref`，避免附着手成为无限强度支点。
 - 梯子拓扑编译一次固定；复位时只改位姿与 mask。
 - Easy 预设关闭课程随机化。
 

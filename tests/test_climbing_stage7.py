@@ -406,7 +406,7 @@ def test_mdp_env_has_full_reward_and_termination_wiring(pinned_ladder: LadderCon
     assert "success" in cfg.terminations
     assert "fall" in cfg.terminations
     assert "time_out" in cfg.terminations
-    assert "max_pelvis_height_l" in cfg.metrics
+    assert "max_head_height_l" in cfg.metrics
     reset_names = [name for name, term in cfg.events.items() if term.mode == "reset"]
     assert "reset_climb_latch" in reset_names
     assert "reset_climb_rewards" in reset_names

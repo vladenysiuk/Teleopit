@@ -56,7 +56,8 @@ class CurriculumConfig:
     # --- Latch capture / overload curriculum ---
     latch_capture_radius: float = 0.07
     latch_capture_radius_range: tuple[float, float] = (0.05, 0.09)
-    latch_break_force: float | None = None
+    latch_break_force: float | None = 500.0
+    """Per-hand connect overload detach (N). ``None`` disables (not sim2real-safe)."""
 
     # --- Optional foot friction bump for cylinder standing (Stage 6 allowed) ---
     foot_sliding_friction: float | None = 2.0
@@ -123,6 +124,7 @@ def easy_curriculum_cfg() -> CurriculumConfig:
         joint_pos_noise_std=0.0,
         latch_capture_radius=0.07,
         latch_capture_radius_range=(0.07, 0.07),
+        latch_break_force=500.0,
         foot_sliding_friction=2.0,
     )
 

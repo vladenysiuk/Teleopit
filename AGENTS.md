@@ -220,6 +220,7 @@ Experiment name: `g1_general_climbing`. Separate task; does **not** share the 16
 
 - Procedurally sampled fixed-topology ladder with pure cylindrical rungs
 - Actions: 29 joint positions + 2 latch attach/detach commands
+- Hand latches are MuJoCo `connect` equalities with default `break_force=500` N (equality `efc.force`, checked every physics substep) and softened `solref=(0.05, 1.0)`; an unbreakable stiff connect is an infinite-strength weld to the kinematic ladder and can slingshot the free base
 - Observations: separated proprioception/history, contact/latch state, privileged relative-rung ladder exteroception (K=6); depth mode has encoder hook only
 - Rewards read simulator task state (not actor observations)
 - Documentation: `docs/docs/tutorials/climbing.md`, `reference/climbing-simulator.md`, `reference/climbing-rl.md`

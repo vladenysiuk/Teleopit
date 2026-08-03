@@ -48,7 +48,16 @@ def small_ladder_cfg() -> LadderConfig:
 
 @pytest.fixture
 def latch_cfg() -> LatchConfig:
-    return LatchConfig(attach_threshold=0.5, detach_threshold=-0.5, capture_radius=0.15)
+    # Stage-3 transition / pull diagnostics intentionally keep an unbreakable,
+    # stiffer latch so residual bounds and hold sequences stay comparable to the
+    # original Stage-3 gate. Training defaults are softer + break_force=500.
+    return LatchConfig(
+        attach_threshold=0.5,
+        detach_threshold=-0.5,
+        capture_radius=0.15,
+        break_force=None,
+        solref=(0.02, 1.0),
+    )
 
 
 def _make_latch_env(
@@ -270,6 +279,50 @@ def test_reset_clears_latch_state_and_equalities(
     assert not bool(state.attached[0, 0].item())
     assert int(state.rung_id[0, 0].item()) == ClimbLatchState.NONE_RUNG_ID
     assert not bool(env.sim.data.eq_active[0].any().item())
+    env.close()
+
+
+def test_overload_break_detaches_and_lockouts_reattach(
+    small_ladder_cfg: LadderConfig,
+) -> None:
+    """Connect equality overload must break; sticky attach must not re-weld."""
+    env = _make_latch_env(
+        ladder_cfg=small_ladder_cfg,
+        latch_cfg=LatchConfig(
+            attach_threshold=0.5,
+            detach_threshold=-0.5,
+            capture_radius=0.15,
+            break_force=200.0,
+            solref=(0.02, 1.0),
+        ),
+    )
+    _establish_hand_contact(env, hand="left", rung_id=2)
+    _step_latch(env, latch_left=1.0)
+    assert bool(_latch_state(env).attached[0, 0].item())
+
+    robot = env.unwrapped.scene["robot"]
+    broke = False
+    for _ in range(30):
+        vel = torch.zeros(1, 6, device=env.device, dtype=torch.float32)
+        vel[0, 0] = -5.0
+        robot.write_root_link_velocity_to_sim(vel)
+        _step_latch(env, latch_left=1.0)
+        state = _latch_state(env)
+        if not bool(state.attached[0, 0].item()):
+            broke = True
+            assert bool(state.overload_lockout[0, 0].item())
+            break
+    assert broke, "expected connect overload to detach the latch"
+
+    # Holding ATTACH after overload must not immediately re-weld.
+    for _ in range(5):
+        _step_latch(env, latch_left=1.0)
+        assert not bool(_latch_state(env).attached[0, 0].item())
+        assert bool(_latch_state(env).overload_lockout[0, 0].item())
+
+    # Neutral command clears lockout; a later attach can succeed again.
+    _step_latch(env, latch_left=0.0)
+    assert not bool(_latch_state(env).overload_lockout[0, 0].item())
     env.close()
 
 

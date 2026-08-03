@@ -105,3 +105,7 @@ data/modelscope_upload/
 .codex
 .omx/
 *.tar
+
+# Random docs
+
+tensorboard_instructions.md

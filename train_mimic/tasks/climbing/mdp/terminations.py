@@ -6,7 +6,6 @@ from typing import TYPE_CHECKING
 
 import torch
 
-from train_mimic.tasks.climbing.ladder.contacts import ClimbContactState
 from train_mimic.tasks.climbing.ladder.latch import ClimbLatchState
 from train_mimic.tasks.climbing.mdp.common import (
     body_height_w,
@@ -25,16 +24,17 @@ if TYPE_CHECKING:
 def climbing_success_predicate(
     env: ManagerBasedRlEnv,
     *,
-    body_name: str = "pelvis",
+    body_name: str = "d435i_link",
     pelvis_clearance_below_top_l: float,
     top_attach_margin_l: float,
     min_attached_hands: int,
 ) -> torch.Tensor:
     """Success predicate shared by reward bonus and termination ``[B]`` bool.
 
-    Requires pelvis height at/above a ladder-relative goal derived from the top
-    active rung, at least ``min_attached_hands`` attached, and at least one hand
-    attached near the top rung (same rung id or within ``top_attach_margin_l``).
+    Requires progress-body height (default head proxy ``d435i_link``) at/above a
+    ladder-relative goal derived from the top active rung, at least
+    ``min_attached_hands`` attached, and at least one hand attached near the top
+    rung (same rung id or within ``top_attach_margin_l``).
     """
     latch = ClimbLatchState.get(env)
     latch._ensure_state()
@@ -65,7 +65,7 @@ def climbing_success_predicate(
 def climbing_success(
     env: ManagerBasedRlEnv,
     *,
-    body_name: str = "pelvis",
+    body_name: str = "d435i_link",
     pelvis_clearance_below_top_l: float,
     top_attach_margin_l: float,
     min_attached_hands: int,
@@ -98,16 +98,15 @@ def latch_overload(
     *,
     force_threshold: float,
 ) -> torch.Tensor:
-    """Optional termination when attached-hand contact force exceeds threshold."""
+    """Optional termination when connect equality force exceeds threshold.
+
+    Uses latch equality force (not hand–rung contact normal). Contact can stay
+    small while an unbreakable ``connect`` still transmits multi-kN loads.
+    """
     latch = ClimbLatchState.get(env)
     latch._ensure_state()
-    contacts = ClimbContactState.get(env)
-    contacts.update()
-    overload = torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)
-    for hand_idx in range(2):
-        attached = latch.state.attached[:, hand_idx]
-        if not bool(torch.any(attached).item()):
-            continue
-        force = contacts.state.hand_contact_force[:, hand_idx]
-        overload |= attached & (force > force_threshold)
-    return overload
+    # Prefer the live per-substep measurement when available.
+    force = latch.state.equality_force
+    if not bool(torch.any(force > 0).item()) and bool(torch.any(latch.state.attached).item()):
+        force = latch._equality_force_magnitudes()
+    return (latch.state.attached & (force > float(force_threshold))).any(dim=-1)

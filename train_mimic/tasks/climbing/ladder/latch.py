@@ -134,10 +134,15 @@ class HandLatchState:
     active_eq_id: torch.Tensor
     attach_event: torch.Tensor
     detach_event: torch.Tensor
+    overload_detach_event: torch.Tensor
+    overload_lockout: torch.Tensor
+    """True until latch command returns to neutral after an overload break."""
     invalid_attach_request: torch.Tensor
     latch_command: torch.Tensor
     capture_radius: torch.Tensor
     """Per-environment attach eligibility radius (m), shape ``[B]``."""
+    equality_force: torch.Tensor
+    """Latest connect equality force magnitude (N) per hand, shape ``[B, 2]``."""
 
 
 class LatchBackend(ABC):
@@ -291,6 +296,10 @@ class ClimbLatchState:
                 ),
                 attach_event=torch.zeros(batch, num_hands, dtype=torch.bool, device=device),
                 detach_event=torch.zeros(batch, num_hands, dtype=torch.bool, device=device),
+                overload_detach_event=torch.zeros(
+                    batch, num_hands, dtype=torch.bool, device=device
+                ),
+                overload_lockout=torch.zeros(batch, num_hands, dtype=torch.bool, device=device),
                 invalid_attach_request=torch.zeros(batch, num_hands, dtype=torch.bool, device=device),
                 latch_command=torch.zeros(batch, num_hands, dtype=torch.float32, device=device),
                 capture_radius=torch.full(
@@ -299,6 +308,7 @@ class ClimbLatchState:
                     dtype=torch.float32,
                     device=device,
                 ),
+                equality_force=torch.zeros(batch, num_hands, dtype=torch.float32, device=device),
             )
         return self.state
 
@@ -322,9 +332,12 @@ class ClimbLatchState:
             self.state.active_eq_id[env_ids] = -1
             self.state.attach_event[env_ids] = False
             self.state.detach_event[env_ids] = False
+            self.state.overload_detach_event[env_ids] = False
+            self.state.overload_lockout[env_ids] = False
             self.state.invalid_attach_request[env_ids] = False
             self.state.latch_command[env_ids] = 0.0
             self.state.capture_radius[env_ids] = float(self.latch_cfg.capture_radius)
+            self.state.equality_force[env_ids] = 0.0
 
     @staticmethod
     def decode_command(raw: torch.Tensor, latch_cfg: LatchConfig) -> torch.Tensor:
@@ -372,11 +385,82 @@ class ClimbLatchState:
             valid[local_idx] = True
         return site_id, valid
 
+    def _equality_force_magnitudes(self) -> torch.Tensor:
+        """Connect equality force magnitude (N) for each attached hand ``[B, 2]``.
+
+        Uses MuJoCo / MuJoCo-Warp ``efc.force`` rows whose ``efc.id`` matches the
+        active latch equality. Contact-sensor force is *not* a substitute: a
+        latched hand can transmit large equality loads while contact normal is
+        near zero.
+        """
+        state = self._ensure_state()
+        forces = torch.zeros_like(state.equality_force)
+        efc = getattr(self.env.sim.data, "efc", None)
+        if efc is None or not hasattr(efc, "force") or not hasattr(efc, "id"):
+            return forces
+
+        efc_force = efc.force
+        efc_id = efc.id
+        # Warp pads efc rows; only the first ``ne`` entries are equality rows.
+        ne = getattr(self.env.sim.data, "ne", None)
+
+        for hand_idx in range(len(HAND_NAMES)):
+            attached = state.attached[:, hand_idx]
+            if not bool(torch.any(attached).item()):
+                continue
+            env_ids = torch.nonzero(attached, as_tuple=False).squeeze(-1)
+            for env_idx in env_ids.tolist():
+                eq_id = int(state.active_eq_id[env_idx, hand_idx].item())
+                if eq_id < 0:
+                    continue
+                n_eq = int(ne[env_idx].item()) if ne is not None else int(efc_force.shape[1])
+                if n_eq <= 0:
+                    continue
+                ids = efc_id[env_idx, :n_eq]
+                mask = ids == eq_id
+                if not bool(torch.any(mask).item()):
+                    continue
+                components = efc_force[env_idx, :n_eq][mask]
+                forces[env_idx, hand_idx] = torch.linalg.norm(components)
+        return forces
+
+    def apply_overload_breaks(self) -> HandLatchState:
+        """Detach hands whose connect equality force exceeds ``break_force``.
+
+        Intended to run every physics substep (``LatchAction.apply_actions``) so
+        overload cannot accumulate across a full policy step.
+        """
+        state = self._ensure_state()
+        state.overload_detach_event[:] = False
+        state.equality_force[:] = self._equality_force_magnitudes()
+
+        break_force = self.latch_cfg.break_force
+        if break_force is None:
+            return state
+
+        threshold = float(break_force)
+        env_ids = torch.arange(self.env.num_envs, device=self.env.device, dtype=torch.int64)
+        for hand_idx in range(len(HAND_NAMES)):
+            overload = state.attached[:, hand_idx] & (state.equality_force[:, hand_idx] > threshold)
+            if not bool(torch.any(overload).item()):
+                continue
+            ids = env_ids[overload]
+            self.backend.deactivate_hand(ids, hand_idx)
+            state.attached[ids, hand_idx] = False
+            state.rung_id[ids, hand_idx] = self.NONE_RUNG_ID
+            state.site_id[ids, hand_idx] = self.NONE_SITE_ID
+            state.active_eq_id[ids, hand_idx] = -1
+            state.detach_event[ids, hand_idx] = True
+            state.overload_detach_event[ids, hand_idx] = True
+            state.overload_lockout[ids, hand_idx] = True
+        return state
+
     def update(self, raw_latch_actions: torch.Tensor) -> HandLatchState:
         """Apply hysteresis latch commands and sync equality constraints."""
         state = self._ensure_state()
         state.attach_event[:] = False
         state.detach_event[:] = False
+        state.overload_detach_event[:] = False
         state.invalid_attach_request[:] = False
         state.latch_command[:] = raw_latch_actions
 
@@ -386,6 +470,11 @@ class ClimbLatchState:
 
         for hand_idx, hand in enumerate(HAND_NAMES):
             cmd = commands[:, hand_idx]
+            # Clear overload lockout once the latch command leaves ATTACH.
+            unlock = state.overload_lockout[:, hand_idx] & (cmd != int(LatchCommand.ATTACH))
+            if torch.any(unlock):
+                state.overload_lockout[env_ids[unlock], hand_idx] = False
+
             attached = state.attached[:, hand_idx]
             detach_mask = attached & (cmd == int(LatchCommand.DETACH))
             if torch.any(detach_mask):
@@ -397,7 +486,11 @@ class ClimbLatchState:
                 state.active_eq_id[ids, hand_idx] = -1
                 state.detach_event[ids, hand_idx] = True
 
-            attach_mask = (~state.attached[:, hand_idx]) & (cmd == int(LatchCommand.ATTACH))
+            attach_mask = (
+                (~state.attached[:, hand_idx])
+                & (cmd == int(LatchCommand.ATTACH))
+                & (~state.overload_lockout[:, hand_idx])
+            )
             if torch.any(attach_mask):
                 ids = env_ids[attach_mask]
                 in_contact = contacts.hand_in_contact[ids, hand_idx]
@@ -434,6 +527,14 @@ class ClimbLatchState:
                             state.site_id[eid, hand_idx] = sid
                             state.active_eq_id[eid, hand_idx] = eq_id
                             state.attach_event[eid, hand_idx] = True
+
+            locked_attach = (
+                (~state.attached[:, hand_idx])
+                & (cmd == int(LatchCommand.ATTACH))
+                & state.overload_lockout[:, hand_idx]
+            )
+            if torch.any(locked_attach):
+                state.invalid_attach_request[env_ids[locked_attach], hand_idx] = True
 
             # Attached hands ignore attach/neutral; touching another rung does not switch.
             still_attached = state.attached[:, hand_idx]

@@ -43,7 +43,7 @@ class ResetStateSnapshot:
     ladder_active_count: int
     ladder_first_height: float
     ladder_frame_pos: tuple[float, float, float]
-    metrics_max_pelvis: float | None = None
+    metrics_max_head: float | None = None
 
 
 # mjlab observation history receives one push when reset computes initial obs.
@@ -96,11 +96,11 @@ def capture_reset_state(env: ManagerBasedRlEnv, *, env_idx: int = 0) -> ResetSta
     prev_joint = action_term_slice(env.action_manager.action, env, "joint_pos")[env_idx]
     prev_latch = action_term_slice(env.action_manager.action, env, "latch")[env_idx]
 
-    metrics_max_pelvis: float | None = None
+    metrics_max_head: float | None = None
     metrics_mgr = getattr(env, "metrics_manager", None)
-    if metrics_mgr is not None and "max_pelvis_height_l" in metrics_mgr.active_terms:
-        idx = metrics_mgr.active_terms.index("max_pelvis_height_l")
-        metrics_max_pelvis = float(metrics_mgr._step_values[env_idx, idx].item())
+    if metrics_mgr is not None and "max_head_height_l" in metrics_mgr.active_terms:
+        idx = metrics_mgr.active_terms.index("max_head_height_l")
+        metrics_max_head = float(metrics_mgr._step_values[env_idx, idx].item())
 
     frame_pos = sample.frame_pos[env_idx].detach().cpu().tolist()
     active = sample.active_mask[env_idx]
@@ -129,7 +129,7 @@ def capture_reset_state(env: ManagerBasedRlEnv, *, env_idx: int = 0) -> ResetSta
         ladder_active_count=int(sample.num_active[env_idx].item()),
         ladder_first_height=first_h,
         ladder_frame_pos=(float(frame_pos[0]), float(frame_pos[1]), float(frame_pos[2])),
-        metrics_max_pelvis=metrics_max_pelvis,
+        metrics_max_head=metrics_max_head,
     )
 
 
@@ -157,7 +157,7 @@ def pollute_reset_sensitive_state(
 
     reward = ClimbRewardState.get(env)
     reward.max_rewarded_attachment_height_l[env_ids] = 1.5
-    reward.max_rewarded_pelvis_height_l[env_ids] = 9.0
+    reward.max_rewarded_progress_height_l[env_ids] = 9.0
     reward.valid_higher_attachment_count[env_ids] = 7
     reward.invalid_latch_count[env_ids] = 5
     reward.success_rewarded[env_ids] = True

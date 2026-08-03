@@ -196,9 +196,9 @@ def print_reward_breakdown(env: ManagerBasedRlEnv, *, header: str, env_idx: int 
     manager = env.reward_manager
     dt = env.step_dt
     scale_dt = getattr(env.cfg, "scale_rewards_by_dt", True)
-    pelvis_h = float(body_ladder_relative_height(env, body_name="pelvis")[env_idx].item())
+    head_h = float(body_ladder_relative_height(env, body_name="d435i_link")[env_idx].item())
     print(header)
-    print(f"  pelvis_height_l={pelvis_h:.4f}")
+    print(f"  head_height_l={head_h:.4f}")
     latch = ClimbLatchState.get(env)
     latch._ensure_state()
     attached = latch.state.attached[env_idx].detach().cpu().tolist()
@@ -221,21 +221,21 @@ def print_reward_breakdown(env: ManagerBasedRlEnv, *, header: str, env_idx: int 
 
 def print_episode_metrics(env: ManagerBasedRlEnv, *, header: str, env_idx: int = 0) -> None:
     state = ClimbRewardState.get(env)
-    current_h = float(body_ladder_relative_height(env, body_name="pelvis")[env_idx].item())
+    current_h = float(body_ladder_relative_height(env, body_name="d435i_link")[env_idx].item())
     goal_h = float(success_goal_height_l(env, pelvis_clearance_below_top_l=0.15)[env_idx].item())
     metrics = getattr(env, "metrics_manager", None)
-    max_h = float(state.max_rewarded_pelvis_height_l[env_idx].item())
+    max_h = float(state.max_rewarded_progress_height_l[env_idx].item())
     hand_frac = 0.0
-    if metrics is not None and "max_pelvis_height_l" in metrics.active_terms:
-        idx = metrics.active_terms.index("max_pelvis_height_l")
+    if metrics is not None and "max_head_height_l" in metrics.active_terms:
+        idx = metrics.active_terms.index("max_head_height_l")
         max_h = float(metrics._step_values[env_idx, idx].item())
     if metrics is not None and "hand_contact_fraction" in metrics.active_terms:
         idx = metrics.active_terms.index("hand_contact_fraction")
         # Per-step indicator; episode mean is only finalized on reset.
         hand_frac = float(metrics._step_values[env_idx, idx].item())
     print(header)
-    print(f"  max_pelvis_height_l={max_h:.4f}")
-    print(f"  current_pelvis_height_l={current_h:.4f}")
+    print(f"  max_head_height_l={max_h:.4f}")
+    print(f"  current_head_height_l={current_h:.4f}")
     print(f"  success_goal_height_l={goal_h:.4f}")
     print(f"  valid_higher_attachments={int(state.valid_higher_attachment_count[env_idx].item())}")
     print(f"  invalid_latch_count={int(state.invalid_latch_count[env_idx].item())}")

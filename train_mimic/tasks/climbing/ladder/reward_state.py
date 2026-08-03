@@ -16,11 +16,11 @@ class ClimbRewardState:
     """Batched reward event memory.
 
     Metrics that only need per-step indicators (contact, torque saturation,
-    current pelvis height) are handled by the metrics manager. This store keeps
+    current head height) are handled by the metrics manager. This store keeps
     quantities that reward terms themselves must remember across steps.
     """
 
-    max_rewarded_pelvis_height_l: torch.Tensor
+    max_rewarded_progress_height_l: torch.Tensor
     max_rewarded_attachment_height_l: torch.Tensor
     success_rewarded: torch.Tensor
     valid_higher_attachment_count: torch.Tensor
@@ -35,7 +35,7 @@ class ClimbRewardState:
         batch = env.num_envs
         device = env.device
         state = cls(
-            max_rewarded_pelvis_height_l=torch.zeros(batch, device=device, dtype=torch.float32),
+            max_rewarded_progress_height_l=torch.zeros(batch, device=device, dtype=torch.float32),
             max_rewarded_attachment_height_l=torch.full(
                 (batch,), float("-inf"), device=device, dtype=torch.float32
             ),
@@ -68,7 +68,7 @@ class ClimbRewardState:
         from train_mimic.tasks.climbing.mdp.common import body_ladder_relative_height
 
         current_h = body_ladder_relative_height(env, body_name=progress_body)
-        self.max_rewarded_pelvis_height_l[env_ids] = current_h[env_ids]
+        self.max_rewarded_progress_height_l[env_ids] = current_h[env_ids]
         self.max_rewarded_attachment_height_l[env_ids] = float("-inf")
         self.success_rewarded[env_ids] = False
         self.valid_higher_attachment_count[env_ids] = 0

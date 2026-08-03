@@ -32,12 +32,15 @@ def _actuator_torque_saturated(env: ManagerBasedRlEnv, *, rtol: float = 0.98) ->
     return torch.any(torch.abs(force) >= (limits * rtol), dim=-1)
 
 
-class max_pelvis_height_l:
-    """Running maximum pelvis ladder-relative height (report with reduce=last)."""
+class max_head_height_l:
+    """Running maximum head / progress-body ladder-relative height (reduce=last).
+
+    Body follows ``ClimbingRewardConfig.progress_body`` (default ``d435i_link``).
+    """
 
     def __init__(self, cfg: MetricsTermCfg, env: ManagerBasedRlEnv) -> None:
         self._env = env
-        self._body_name = str(cfg.params.get("body_name", "pelvis"))
+        self._body_name = str(cfg.params.get("body_name", "d435i_link"))
         self._max = torch.full(
             (env.num_envs,), float("-inf"), device=env.device, dtype=torch.float32
         )
@@ -53,15 +56,15 @@ class max_pelvis_height_l:
             return
         self._max[env_ids] = height[env_ids]
 
-    def __call__(self, env: ManagerBasedRlEnv, *, body_name: str = "pelvis") -> torch.Tensor:
+    def __call__(self, env: ManagerBasedRlEnv, *, body_name: str = "d435i_link") -> torch.Tensor:
         del body_name
         height = body_ladder_relative_height(env, body_name=self._body_name)
         self._max = torch.maximum(self._max, height)
         return self._max
 
 
-def pelvis_height_l(env: ManagerBasedRlEnv, *, body_name: str = "pelvis") -> torch.Tensor:
-    """Current pelvis ladder-relative height ``[B]``."""
+def head_height_l(env: ManagerBasedRlEnv, *, body_name: str = "d435i_link") -> torch.Tensor:
+    """Current head / progress-body ladder-relative height ``[B]``."""
     return body_ladder_relative_height(env, body_name=body_name)
 
 
@@ -90,7 +93,7 @@ def invalid_latch_count(env: ManagerBasedRlEnv) -> torch.Tensor:
 def episode_success(
     env: ManagerBasedRlEnv,
     *,
-    body_name: str = "pelvis",
+    body_name: str = "d435i_link",
     pelvis_clearance_below_top_l: float,
     top_attach_margin_l: float,
     min_attached_hands: int,

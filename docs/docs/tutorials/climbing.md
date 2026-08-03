@@ -219,7 +219,7 @@ train_mimic/scripts/
 ## Known limitations
 
 - **No production depth camera.** Privileged relative-rung geometry is the v1 perception path.
-- **Simulation only.** Point-hand spheres and `connect` latches are MuJoCo abstractions, not a sim-to-real deployment claim.
+- **Simulation only.** Point-hand spheres and `connect` latches are MuJoCo abstractions, not a sim-to-real deployment claim. Training latches default to a **500 N** overload break and softened `solref` so an attached hand cannot act as an infinite-strength pivot.
 - **Fixed compiled rung count.** Ladder topology is compiled once; poses and active masks vary at reset.
 - **Curriculum axes exist but easy preset keeps randomization off.** Expand one axis at a time after learnability is confirmed.
 

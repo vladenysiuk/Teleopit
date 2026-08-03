@@ -39,7 +39,7 @@ class EpisodeRolloutMetrics:
     agent: str
     steps: int
     completed_episodes: int
-    max_pelvis_height_l: float
+    max_head_height_l: float
     max_valid_higher_attachments: int
     max_invalid_latch: int
     invalid_latch_per_step: float
@@ -57,8 +57,8 @@ class EpisodeRolloutMetrics:
 class LearnabilityComparison:
     """Policy vs baseline metric deltas."""
 
-    pelvis_height_gain_vs_zero: float
-    pelvis_height_gain_vs_random: float
+    head_height_gain_vs_zero: float
+    head_height_gain_vs_random: float
     attachment_gain_vs_zero: int
     attachment_gain_vs_random: int
     invalid_latch_reduction_vs_zero: float
@@ -70,8 +70,8 @@ class LearnabilityComparison:
     def learning_signal(self) -> bool:
         """Conservative pre-run success evidence from Stage 9 plan."""
         return (
-            self.pelvis_height_gain_vs_zero > 0.0
-            or self.pelvis_height_gain_vs_random > 0.0
+            self.head_height_gain_vs_zero > 0.0
+            or self.head_height_gain_vs_random > 0.0
             or self.attachment_gain_vs_zero > 0
             or self.attachment_gain_vs_random > 0
         )
@@ -157,8 +157,8 @@ def collect_rollout_metrics(
     base_env.reset()
     summary = run_agent_rollout(base_env, action_fn, num_steps=num_steps)
 
-    pelvis_h = body_ladder_relative_height(base_env, body_name="pelvis")
-    max_pelvis = float(pelvis_h.max().item())
+    head_h = body_ladder_relative_height(base_env, body_name="d435i_link")
+    max_head = float(head_h.max().item())
 
     reward_state = ClimbRewardState.get(base_env)
     max_attach = int(reward_state.valid_higher_attachment_count.max().item())
@@ -171,7 +171,7 @@ def collect_rollout_metrics(
         agent=agent,
         steps=summary.steps,
         completed_episodes=summary.completed_episodes,
-        max_pelvis_height_l=max_pelvis,
+        max_head_height_l=max_head,
         max_valid_higher_attachments=max_attach,
         max_invalid_latch=max_invalid,
         invalid_latch_per_step=max_invalid / max(summary.steps, 1),
@@ -190,16 +190,16 @@ def compare_learnability(
 ) -> LearnabilityComparison:
     """Compare trained policy metrics against zero/random baselines."""
     notes: list[str] = []
-    if trained.max_pelvis_height_l <= zero.max_pelvis_height_l:
-        notes.append("trained max pelvis height did not exceed zero baseline")
+    if trained.max_head_height_l <= zero.max_head_height_l:
+        notes.append("trained max head height did not exceed zero baseline")
     if trained.max_invalid_latch >= zero.max_invalid_latch:
         notes.append("trained invalid latch count did not improve vs zero")
     if trained.torque_saturation_fraction > zero.torque_saturation_fraction + 0.15:
         notes.append("torque saturation increased vs zero baseline")
 
     return LearnabilityComparison(
-        pelvis_height_gain_vs_zero=trained.max_pelvis_height_l - zero.max_pelvis_height_l,
-        pelvis_height_gain_vs_random=trained.max_pelvis_height_l - random.max_pelvis_height_l,
+        head_height_gain_vs_zero=trained.max_head_height_l - zero.max_head_height_l,
+        head_height_gain_vs_random=trained.max_head_height_l - random.max_head_height_l,
         attachment_gain_vs_zero=trained.max_valid_higher_attachments - zero.max_valid_higher_attachments,
         attachment_gain_vs_random=trained.max_valid_higher_attachments - random.max_valid_higher_attachments,
         invalid_latch_reduction_vs_zero=zero.invalid_latch_per_step - trained.invalid_latch_per_step,
@@ -371,13 +371,13 @@ def run_learnability_experiment(
             base_env = _unwrap_env(vec_env)
             base_env.reset()
             summary = _run_vec_policy_rollout(vec_env, policy, num_steps=rollout_steps)
-            pelvis_h = body_ladder_relative_height(base_env, body_name="pelvis")
+            head_h = body_ladder_relative_height(base_env, body_name="d435i_link")
             reward_state = ClimbRewardState.get(base_env)
             trained = EpisodeRolloutMetrics(
                 agent="trained",
                 steps=summary.steps,
                 completed_episodes=summary.completed_episodes,
-                max_pelvis_height_l=float(pelvis_h.max().item()),
+                max_head_height_l=float(head_h.max().item()),
                 max_valid_higher_attachments=int(
                     reward_state.valid_higher_attachment_count.max().item()
                 ),
@@ -415,7 +415,7 @@ def run_learnability_experiment(
 def print_baseline_report(zero: EpisodeRolloutMetrics, random: EpisodeRolloutMetrics) -> None:
     for metrics in (zero, random):
         print(f"[baseline {metrics.agent}]")
-        print(f"  max_pelvis_height_l={metrics.max_pelvis_height_l:.4f}")
+        print(f"  max_head_height_l={metrics.max_head_height_l:.4f}")
         print(f"  max_valid_higher_attachments={metrics.max_valid_higher_attachments}")
         print(f"  max_invalid_latch={metrics.max_invalid_latch}")
         print(f"  invalid_latch_per_step={metrics.invalid_latch_per_step:.4f}")
@@ -430,15 +430,15 @@ def print_learnability_report(report: LearnabilityReport) -> None:
     print_baseline_report(report.zero, report.random)
     if report.trained is not None:
         print("[baseline trained]")
-        print(f"  max_pelvis_height_l={report.trained.max_pelvis_height_l:.4f}")
+        print(f"  max_head_height_l={report.trained.max_head_height_l:.4f}")
         print(f"  max_valid_higher_attachments={report.trained.max_valid_higher_attachments}")
         print(f"  max_invalid_latch={report.trained.max_invalid_latch}")
         print(f"  playback_ok={report.playback_ok}")
     if report.comparison is not None:
         cmp = report.comparison
         print("[learnability comparison]")
-        print(f"  pelvis_gain_vs_zero={cmp.pelvis_height_gain_vs_zero:.4f}")
-        print(f"  pelvis_gain_vs_random={cmp.pelvis_height_gain_vs_random:.4f}")
+        print(f"  head_gain_vs_zero={cmp.head_height_gain_vs_zero:.4f}")
+        print(f"  head_gain_vs_random={cmp.head_height_gain_vs_random:.4f}")
         print(f"  attachment_gain_vs_zero={cmp.attachment_gain_vs_zero}")
         print(f"  invalid_latch_reduction_vs_zero={cmp.invalid_latch_reduction_vs_zero:.4f}")
         print(f"  learning_signal={cmp.learning_signal}")

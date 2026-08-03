@@ -31,18 +31,19 @@ def _event_rate(env: ManagerBasedRlEnv, event: torch.Tensor) -> torch.Tensor:
     return event.to(dtype=torch.float32) / float(env.step_dt)
 
 
-def upward_progress(env: ManagerBasedRlEnv, *, body_name: str = "pelvis") -> torch.Tensor:
-    """Novel maximum pelvis ladder-relative height rate ``[B]``.
+def upward_progress(env: ManagerBasedRlEnv, *, body_name: str = "d435i_link") -> torch.Tensor:
+    """Novel maximum progress-body ladder-relative height rate ``[B]``.
 
-    Uses ``max_rewarded_pelvis_height_l`` so rise–fall–rise below the historical
+    Default body is the head proxy ``d435i_link`` (G1 29-DoF has no head body).
+    Uses ``max_rewarded_progress_height_l`` so rise–fall–rise below the historical
     maximum cannot farm progress. Total progress reward telescopes to
     ``w * (max_t h_t - h_0)``.
     """
     state = ClimbRewardState.get(env)
     height_l = body_ladder_relative_height(env, body_name=body_name)
-    new_max = torch.maximum(state.max_rewarded_pelvis_height_l, height_l)
-    delta = new_max - state.max_rewarded_pelvis_height_l
-    state.max_rewarded_pelvis_height_l = new_max
+    new_max = torch.maximum(state.max_rewarded_progress_height_l, height_l)
+    delta = new_max - state.max_rewarded_progress_height_l
+    state.max_rewarded_progress_height_l = new_max
     return delta / float(env.step_dt)
 
 
@@ -82,7 +83,7 @@ def new_higher_attachment(
 def success_bonus(
     env: ManagerBasedRlEnv,
     *,
-    body_name: str = "pelvis",
+    body_name: str = "d435i_link",
     pelvis_clearance_below_top_l: float,
     top_attach_margin_l: float,
     min_attached_hands: int,
@@ -106,15 +107,15 @@ def success_bonus(
 def time_penalty_mask(
     env: ManagerBasedRlEnv,
     *,
-    body_name: str = "pelvis",
+    body_name: str = "d435i_link",
     pelvis_clearance_below_top_l: float,
     top_attach_margin_l: float,
     min_attached_hands: int,
 ) -> torch.Tensor:
     """Returns ``1`` while the episode has not yet reached success ``[B]``."""
-    del body_name
     not_success = ~climbing_success_predicate(
         env,
+        body_name=body_name,
         pelvis_clearance_below_top_l=pelvis_clearance_below_top_l,
         top_attach_margin_l=top_attach_margin_l,
         min_attached_hands=min_attached_hands,
@@ -144,16 +145,7 @@ def latch_overload_penalty(
     *,
     force_threshold: float = 500.0,
 ) -> torch.Tensor:
-    """Optional overload penalty when attached-hand contact force exceeds threshold ``[B]``."""
-    latch = ClimbLatchState.get(env)
-    latch._ensure_state()
-    contacts = ClimbContactState.get(env)
-    contacts.update()
-    overload = torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)
-    for hand_idx in range(2):
-        attached = latch.state.attached[:, hand_idx]
-        if not bool(torch.any(attached).item()):
-            continue
-        force = contacts.state.hand_contact_force[:, hand_idx]
-        overload |= attached & (force > force_threshold)
-    return overload.to(dtype=torch.float32)
+    """Optional overload penalty when connect equality force exceeds threshold ``[B]``."""
+    from train_mimic.tasks.climbing.mdp.terminations import latch_overload
+
+    return latch_overload(env, force_threshold=force_threshold).to(dtype=torch.float32)

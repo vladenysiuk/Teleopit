@@ -144,7 +144,8 @@ Direct rung-to-rung switching is **disallowed**; detach first.
 - Predeclared **`connect` equalities** for every valid `(hand, rung, site)` triple; exactly one activated per attached hand.
 - Nearest eligible site selected on attach.
 - `LatchConfig.capture_radius` default **0.07 m**.
-- Optional `break_force` exists but defaults off.
+- `LatchConfig.break_force` default **500 N**: each physics substep reads the active connect equality force from `efc.force` and detaches that hand when `||F||` exceeds the threshold. `None` disables overload break (debug / hold-pose only).
+- Default `solref=(0.05, 1.0)` keeps the latch soft enough to limit attach impulse and stored elastic energy. An unbreakable stiff connect is an infinite-strength weld to the kinematic ladder frame and can slingshot the free base.
 
 ### Per-env state
 
@@ -153,7 +154,9 @@ Direct rung-to-rung switching is **disallowed**; detach first.
 | `attached[B, 2]` | Boolean latch state |
 | `rung_id[B, 2]` | Attached rung or `-1` |
 | `site_id[B, 2]` | Selected site index |
-| `capture_radius[B, 2]` | Per-env radius (curriculum-ready) |
+| `capture_radius[B]` | Per-env radius (curriculum-ready) |
+| `equality_force[B, 2]` | Latest connect equality force magnitude (N) |
+| `overload_detach_event[B, 2]` | True on the substep a hand broke from overload |
 
 ## Observations (simulator providers)
 

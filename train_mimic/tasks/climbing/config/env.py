@@ -419,7 +419,9 @@ def make_climbing_hold_pose_env_cfg(
         rung_friction=hold_cfg.rung_friction,
     )
     # Slightly stiffer connect latch for the static hold (still soft; not welded).
-    hold_latch_cfg = latch_cfg or LatchConfig(solref=(0.012, 1.0))
+    # Disable overload break here so Stage-6 gravity-hold diagnostics are not
+    # interrupted by brief constraint spikes during placement.
+    hold_latch_cfg = latch_cfg or LatchConfig(solref=(0.012, 1.0), break_force=None)
     cfg = make_general_climbing_env_cfg(
         num_envs=num_envs,
         seed=seed,

@@ -56,8 +56,10 @@ class LatchAction(ActionTerm):
         self._get_latch().update(self._raw_actions)
 
     def apply_actions(self) -> None:
-        # Constraints are activated in process_actions; nothing to write per substep.
-        return
+        # Overload break must run every physics substep using the previous step's
+        # equality forces; process_actions alone would let a slingshot accumulate
+        # across the full decimation window.
+        self._get_latch().apply_overload_breaks()
 
     def reset(self, env_ids: torch.Tensor | slice | None = None) -> None:
         if env_ids is None:

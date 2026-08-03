@@ -31,7 +31,7 @@ ClimbingOnPolicyRunner → rsl_rl PPO（分项 RewardTerm 日志）
 
 | 项 | 权重 | 含义 |
 |----|-----:|------|
-| `upward_progress` | +10 | 骨盆 ladder 相对高度增量 |
+| `upward_progress` | +10 | 头部（`d435i_link`）ladder 相对高度增量（不用骨盆，避免倒立空翻刷分） |
 | `new_higher_attachment` | +2 | 首次附着更高档（一次性） |
 | `success` | +20 | 登顶 + 最少附着手数 |
 | `time_penalty` | −0.05×dt | 未成功时物理时间惩罚 |
@@ -44,6 +44,19 @@ ClimbingOnPolicyRunner → rsl_rl PPO（分项 RewardTerm 日志）
 ## 终止
 
 成功、坠落（过低/离梯过远）、超时、NaN；锁扣过载默认关闭。
+
+## Episode 指标
+
+| 指标 | 说明 |
+|------|------|
+| `max_head_height_l` | 头部 / 进度体 ladder 相对高度运行最大值（默认 `d435i_link`） |
+| `head_height_l` | 当前头部 / 进度体 ladder 相对高度 |
+| `valid_higher_attachments` | 有效更高附着次数 |
+| `invalid_latch_count` | 无效附着请求次数 |
+| `success` | 成功标志 |
+| `hand_contact_fraction` | 手接触均值 |
+| `time_to_success` | 首次成功步数（未成功为 −1） |
+| `torque_saturation_fraction` | 力矩饱和均值 |
 
 ## PPO 默认
 
@@ -73,7 +86,7 @@ python train_mimic/scripts/train_climb.py --easy --all_gpus --num_envs 128
 
 ## 可学习性
 
-`debug_climb.py --mode learnability` 对比 zero/random 与短训 checkpoint 的骨盆高度与有效附着次数。
+`debug_climb.py --mode learnability` 对比 zero/random 与短训 checkpoint 的进度高度（默认头部 / `d435i_link`）与有效附着次数。
 
 ## 回放
 
