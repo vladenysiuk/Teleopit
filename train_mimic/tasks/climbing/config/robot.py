@@ -56,6 +56,8 @@ def _get_g1_climbing_spec(robot_xml: str | Path | None = None) -> mujoco.MjSpec:
         spec.delete(actuator)
     for key in list(spec.keys):
         spec.delete(key)
+    floor = spec.geom("floor")
+    spec.delete(floor)
 
     for wrist_body, point_name, site_name in (
         (LEFT_WRIST_BODY, LEFT_HAND_POINT, LEFT_HAND_POINT_SITE),
