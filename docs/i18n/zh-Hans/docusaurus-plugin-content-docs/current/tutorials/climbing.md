@@ -70,6 +70,14 @@ python train_mimic/scripts/train_climb.py --smoke
 python train_mimic/scripts/train_climb.py --easy
 ```
 
+### Medium 预设（完整梯子）
+
+与 `--easy` 相同的 MDP（辅助 hold 复位、双手初始附着、高摩擦、15 s episode），但使用固定的完整 12 级梯子：
+
+```bash
+python train_mimic/scripts/train_climb.py --medium
+```
+
 ### 多 GPU（单节点）
 
 `--num_envs` 为 **每块 GPU** 的环境数。
@@ -103,6 +111,11 @@ python train_mimic/scripts/play_climb.py \
     --checkpoint logs/rsl_rl/g1_general_climbing/<run>/model_800.pt \
     --easy --device cuda:0 --seed 42
 
+# Medium checkpoint（与 train --medium MDP 一致）
+python train_mimic/scripts/play_climb.py \
+    --checkpoint logs/rsl_rl/g1_general_climbing/<run>/model_800.pt \
+    --medium --device cuda:0 --seed 42
+
 # 无头多 seed mp4（默认 8 次复位采样拼成一条视频，30% 速度）
 MUJOCO_GL=egl python train_mimic/scripts/play_climb.py \
     --checkpoint logs/rsl_rl/g1_general_climbing/<run>/model_800.pt \
@@ -114,7 +127,7 @@ python train_mimic/scripts/play_climb.py \
     --easy --viewer viser
 ```
 
-`--video` 会把 `--video-clips` 次复位（默认 `8`，seed 为 `seed..seed+clips-1`）拼成单个 Full HD（`1920x1080`）`play_climb.mp4`，保存在 `<checkpoint_dir>/videos/play/`。每个 clip 默认一整局，可用 `--video-length` 覆盖。播放默认 `--video-speed 0.3`（实时的 30%）。未加 `--easy` 且课程随机化开启时，每次复位也会重采样梯子布局。
+`--video` 会把 `--video-clips` 次复位（默认 `8`，seed 为 `seed..seed+clips-1`）拼成单个 Full HD（`1920x1080`）`play_climb.mp4`，保存在 `<checkpoint_dir>/videos/play/`。每个 clip 默认一整局，可用 `--video-length` 覆盖。播放默认 `--video-speed 0.3`（实时的 30%）。未加 `--easy` / `--medium` 且课程随机化开启时，每次复位也会重采样梯子布局。
 
 ## 自动化测试
 
@@ -129,7 +142,7 @@ pytest tests/test_climbing_stage*.py -v
 - 仅仿真验证，非 sim2real 部署承诺。点手球与 `connect` 锁扣是 MuJoCo 抽象；训练默认使用 **500 N** 过载断开与软化 `solref`，避免附着手成为无限强度支点。
 - **mujoco_warp sensor 补丁。** `train_mimic.warp_patches` 在构建环境前修复 mujoco_warp 3.8.x 中 `_frame_axis` UNKNOWN 分支的 codegen 问题（`undefined symbol: xmat`）。攀爬相关入口会自动应用。
 - 梯子拓扑编译一次固定；复位时只改位姿与 mask。
-- Easy 预设关闭课程随机化。
+- Easy / medium 预设关闭课程随机化。
 
 ## 明确非目标
 

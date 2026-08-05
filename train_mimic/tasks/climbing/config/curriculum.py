@@ -129,6 +129,16 @@ def easy_curriculum_cfg() -> CurriculumConfig:
     )
 
 
+def medium_curriculum_cfg() -> CurriculumConfig:
+    """Easy MDP with a full fixed 12-rung ladder (all slots active)."""
+    return replace(
+        easy_curriculum_cfg(),
+        max_rungs=12,
+        min_active_rungs=12,
+        max_active_rungs=12,
+    )
+
+
 def curriculum_ladder_cfg(curriculum: CurriculumConfig) -> LadderConfig:
     """Build a ``LadderConfig`` from curriculum fixed values and enabled ranges."""
     spacing_min = curriculum.spacing_min

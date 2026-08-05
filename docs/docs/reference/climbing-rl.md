@@ -39,6 +39,7 @@ ClimbingOnPolicyRunner ──► rsl_rl PPO
 | `config/rewards.py` | `ClimbingRewardConfig`, `ClimbingTerminationConfig`, wiring |
 | `config/rl.py` | PPO runner defaults, `ClimbingModel` class path |
 | `config/easy.py` | Stage 9 easy env + PPO presets |
+| `config/medium.py` | Medium env + PPO presets (easy MDP, 12 rungs) |
 | `config/smoke.py` | Stage 8 smoke presets |
 | `config/curriculum.py` | `CurriculumConfig`, axis toggles |
 | `config/registry.py` | Task registration |
@@ -181,6 +182,10 @@ Dummy depth encoder path exists for config-only tests; production env rejects `m
 
 CI subset: 4 envs, 12 iterations (`learnability` debug mode).
 
+### Medium (`config/medium.py` + `--medium`)
+
+Same as `--easy`, except the ladder is a fixed full 12-rung topology (`max_rungs=min_active=max_active=12`). Use this as the intermediate step between the short easy ladder and broader curriculum randomization.
+
 ## Curriculum
 
 `CurriculumConfig` (`config/curriculum.py`) exposes axes as `randomize_*` flags — no hard-coded stage switches.
@@ -234,6 +239,7 @@ Owner validation: multi-seed videos, attachment sequences, foot contact/slip —
 | Flag | MDP |
 |------|-----|
 | `--easy` | Same as `train_climb.py --easy` |
+| `--medium` | Same as `train_climb.py --medium` |
 | `--smoke-ladder` | Pinned ladder, no curriculum reset |
 
 Supports native viewer, Viser (SSH), and headless `--video` (EGL). Video mode concatenates multiple reseeds into one Full HD mp4 at 30% playback speed by default (`--video-clips 8`, `--video-speed 0.3`, `1920x1080`).

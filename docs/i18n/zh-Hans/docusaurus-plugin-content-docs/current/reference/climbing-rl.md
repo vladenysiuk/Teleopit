@@ -71,6 +71,7 @@ ClimbingOnPolicyRunner → rsl_rl PPO（分项 RewardTerm 日志）
 |------|------|------|-------|
 | Smoke | `--smoke` | 64 | 100 |
 | Easy | `--easy` | 256/GPU | 800 |
+| Medium | `--medium` | 256/GPU | 800（与 easy 相同 MDP，固定完整 12 级梯子） |
 
 ## 多 GPU
 
@@ -82,7 +83,7 @@ python train_mimic/scripts/train_climb.py --easy --all_gpus --num_envs 128
 
 ## 课程
 
-`CurriculumConfig` 的 `randomize_*` 轴；easy 预设全部关闭。建议逐轴开启：初始附着概率 → 间距 → 档数 → 梯子位姿 → 物理 → 初始姿态 → capture 半径。
+`CurriculumConfig` 的 `randomize_*` 轴；easy / medium 预设全部关闭。建议逐轴开启：初始附着概率 → 间距 → 档数 → 梯子位姿 → 物理 → 初始姿态 → capture 半径。
 
 ## 可学习性
 
@@ -90,7 +91,7 @@ python train_mimic/scripts/train_climb.py --easy --all_gpus --num_envs 128
 
 ## 回放
 
-`play_climb.py --easy` 须与训练 `--easy` MDP 一致。支持 native viewer、Viser（SSH）与无头 `--video`（EGL）。视频模式默认将多次 reseed 拼成一条 Full HD mp4，并以 30% 速度播放（`--video-clips 8`，`--video-speed 0.3`，`1920x1080`）。
+`play_climb.py --easy` / `--medium` 须与对应训练预设 MDP 一致。支持 native viewer、Viser（SSH）与无头 `--video`（EGL）。视频模式默认将多次 reseed 拼成一条 Full HD mp4，并以 30% 速度播放（`--video-clips 8`，`--video-speed 0.3`，`1920x1080`）。
 
 ## 测试
 

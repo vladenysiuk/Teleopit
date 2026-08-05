@@ -226,7 +226,7 @@ Experiment name: `g1_general_climbing`. Separate task; does **not** share the 16
 - `train_mimic.warp_patches` patches mujoco_warp 3.8.x `_frame_axis` UNKNOWN (`undefined symbol: xmat`) before mjlab import; applied by `import_training_stack()` and climbing entry points
 - Documentation: `docs/docs/tutorials/climbing.md`, `reference/climbing-simulator.md`, `reference/climbing-rl.md`
 - Debug: `python train_mimic/scripts/debug_climb.py --mode <scene|contacts|latch|...>`
-- Train: `python train_mimic/scripts/train_climb.py --smoke|--easy`
+- Train: `python train_mimic/scripts/train_climb.py --smoke|--easy|--medium`
 - Regression: `python scripts/dev/run_climbing_regression.py`
 
 ### Dataset Pipeline

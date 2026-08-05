@@ -29,8 +29,11 @@ python scripts/dev/run_climbing_regression.py --quick
 # Scene viewer (macOS: mjpython)
 mjpython train_mimic/scripts/debug_climb.py --mode scene --seed 42
 
-# Train easy preset
+# Train easy preset (6 rungs)
 python train_mimic/scripts/train_climb.py --easy
+
+# Medium preset (same as easy, full 12-rung ladder)
+python train_mimic/scripts/train_climb.py --medium
 
 # Multi-GPU (all visible GPUs, 128 envs/GPU)
 python train_mimic/scripts/train_climb.py --easy --all_gpus --num_envs 128

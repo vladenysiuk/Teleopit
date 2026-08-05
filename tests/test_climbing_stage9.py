@@ -9,6 +9,7 @@ from train_mimic.tasks.climbing.config.curriculum import (
     CurriculumConfig,
     curriculum_ladder_cfg,
     easy_curriculum_cfg,
+    medium_curriculum_cfg,
     with_curriculum_axis,
 )
 from train_mimic.tasks.climbing.config.easy import (
@@ -18,6 +19,10 @@ from train_mimic.tasks.climbing.config.easy import (
     EASY_NUM_ENVS,
     make_climbing_easy_env_cfg,
     make_climbing_easy_ppo_runner_cfg,
+)
+from train_mimic.tasks.climbing.config.medium import (
+    MEDIUM_EPISODE_LENGTH_S,
+    make_climbing_medium_env_cfg,
 )
 from train_mimic.tasks.climbing.debug_mdp import observations_finite
 from train_mimic.tasks.climbing.ladder.latch import ClimbLatchState
@@ -179,6 +184,29 @@ def test_easy_defaults_match_owner_plan() -> None:
     assert EASY_NUM_ENVS == 256
 
 
+def test_medium_curriculum_uses_full_12_rung_ladder() -> None:
+    curriculum = medium_curriculum_cfg()
+    assert curriculum.max_rungs == 12
+    assert curriculum.min_active_rungs == curriculum.max_active_rungs == 12
+    assert not curriculum.randomize_rung_count
+    ladder = curriculum_ladder_cfg(curriculum)
+    assert ladder.max_rungs == 12
+    assert ladder.min_active_rungs == ladder.max_active_rungs == 12
+
+
+def test_medium_env_matches_easy_mdp_with_full_ladder() -> None:
+    pytest.importorskip("mjlab")
+    cfg = make_climbing_medium_env_cfg(num_envs=2, seed=7)
+    assert cfg.episode_length_s == MEDIUM_EPISODE_LENGTH_S == EASY_EPISODE_LENGTH_S
+    assert "reset_climb_curriculum_pose" in cfg.events
+    ladder_cfg = cfg.events["reset_ladder"].params["ladder_cfg"]
+    assert ladder_cfg.max_rungs == 12
+    assert ladder_cfg.min_active_rungs == ladder_cfg.max_active_rungs == 12
+    curriculum = cfg.events["reset_climb_curriculum_pose"].params["curriculum_cfg"]
+    assert curriculum.initial_hand_attach_prob == 1.0
+    assert curriculum.use_hold_pose_reset
+
+
 def test_play_climb_easy_and_smoke_flags_are_mutually_exclusive() -> None:
     import sys
     from unittest.mock import patch
@@ -192,6 +220,30 @@ def test_play_climb_easy_and_smoke_flags_are_mutually_exclusive() -> None:
     ):
         with pytest.raises(SystemExit):
             play_climb.parse_args()
+
+
+def test_play_climb_easy_and_medium_flags_are_mutually_exclusive() -> None:
+    import sys
+    from unittest.mock import patch
+
+    from train_mimic.scripts import play_climb
+
+    with patch.object(
+        sys,
+        "argv",
+        ["play_climb.py", "--checkpoint", "model.pt", "--easy", "--medium"],
+    ):
+        with pytest.raises(SystemExit):
+            play_climb.parse_args()
+
+
+def test_train_climb_presets_are_mutually_exclusive() -> None:
+    from train_mimic.scripts import train_climb
+
+    with pytest.raises(SystemExit):
+        train_climb.parse_args(["--easy", "--medium"])
+    with pytest.raises(SystemExit):
+        train_climb.parse_args(["--smoke", "--medium"])
 
 
 def test_easy_env_play_preset_keeps_curriculum_reset() -> None:

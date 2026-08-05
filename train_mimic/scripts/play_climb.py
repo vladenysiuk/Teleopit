@@ -7,6 +7,11 @@ Usage:
         --checkpoint logs/rsl_rl/g1_general_climbing/<run>/model_800.pt \
         --easy
 
+    # Medium checkpoint (same MDP as easy, full 12-rung ladder — matches train --medium)
+    python train_mimic/scripts/play_climb.py \
+        --checkpoint logs/rsl_rl/g1_general_climbing/<run>/model_800.pt \
+        --medium
+
     # Record headless multi-clip video (reseeds each clip; one Full HD mp4 at 30% speed)
     MUJOCO_GL=egl python train_mimic/scripts/play_climb.py \
         --checkpoint logs/rsl_rl/g1_general_climbing/<run>/model_800.pt \
@@ -45,6 +50,7 @@ from train_mimic.app import (
 )
 from train_mimic.tasks.climbing.config.constants import CLIMBING_TASK_ID
 from train_mimic.tasks.climbing.config.easy import make_climbing_easy_env_cfg
+from train_mimic.tasks.climbing.config.medium import make_climbing_medium_env_cfg
 from train_mimic.tasks.climbing.config.smoke import make_climbing_smoke_env_cfg
 
 # Default multi-seed validation capture: several reset samples in one mp4.
@@ -225,8 +231,16 @@ def parse_args() -> argparse.Namespace:
         "--easy",
         action="store_true",
         help=(
-            "Use the Stage 9 easy MDP (fixed ladder, assisted hold reset, hand attach). "
-            "Match train_climb.py --easy checkpoints."
+            "Use the Stage 9 easy MDP (fixed 6-rung ladder, assisted hold reset, "
+            "hand attach). Match train_climb.py --easy checkpoints."
+        ),
+    )
+    env_preset.add_argument(
+        "--medium",
+        action="store_true",
+        help=(
+            "Use the medium MDP (same as --easy with a fixed full 12-rung ladder). "
+            "Match train_climb.py --medium checkpoints."
         ),
     )
     env_preset.add_argument(
@@ -280,6 +294,12 @@ def main() -> None:
 
     if args.easy:
         env_cfg = make_climbing_easy_env_cfg(
+            num_envs=args.num_envs,
+            seed=args.seed,
+            play=True,
+        )
+    elif args.medium:
+        env_cfg = make_climbing_medium_env_cfg(
             num_envs=args.num_envs,
             seed=args.seed,
             play=True,

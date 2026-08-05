@@ -8,6 +8,9 @@ Usage:
     # Stage 9 easy learnability preset (256 envs/GPU, 800 iterations)
     python train_mimic/scripts/train_climb.py --easy
 
+    # Medium: same as easy, but fixed full 12-rung ladder
+    python train_mimic/scripts/train_climb.py --medium
+
     # Single-node multi-GPU (num_envs is per GPU; 4x A100 -> 1024 total with 256/GPU)
     python train_mimic/scripts/train_climb.py --easy \
         --gpu_ids 0 1 2 3 --num_envs 256
@@ -77,6 +80,14 @@ from train_mimic.tasks.climbing.config.easy import (
     EASY_SEED,
     make_climbing_easy_env_cfg,
 )
+from train_mimic.tasks.climbing.config.medium import (
+    MEDIUM_EPISODE_LENGTH_S,
+    MEDIUM_MAX_ITERATIONS,
+    MEDIUM_NUM_ENVS,
+    MEDIUM_SAVE_INTERVAL,
+    MEDIUM_SEED,
+    make_climbing_medium_env_cfg,
+)
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
@@ -94,7 +105,8 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--resume", type=str, default=None)
     parser.add_argument("--device", type=str, default=None)
     add_multi_gpu_arguments(parser)
-    parser.add_argument(
+    env_preset = parser.add_mutually_exclusive_group()
+    env_preset.add_argument(
         "--smoke",
         action="store_true",
         help=(
@@ -102,12 +114,20 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
             "conservative episode length, no broad domain randomization."
         ),
     )
-    parser.add_argument(
+    env_preset.add_argument(
         "--easy",
         action="store_true",
         help=(
             "Stage 9 easy learnability preset: assisted hold start, both hands "
-            "attached, fixed ladder, 256 envs/GPU, 800 iterations."
+            "attached, fixed 6-rung ladder, 256 envs/GPU, 800 iterations."
+        ),
+    )
+    env_preset.add_argument(
+        "--medium",
+        action="store_true",
+        help=(
+            "Same as --easy, but with a fixed full 12-rung ladder "
+            "(256 envs/GPU, 800 iterations)."
         ),
     )
     return parser.parse_args(argv)
@@ -186,6 +206,20 @@ def _build_env_cfg(args: argparse.Namespace) -> tuple[Any, int, int | None, int 
             play=False,
         )
         return env_cfg, num_envs, max_iterations, EASY_SAVE_INTERVAL, seed
+
+    if args.medium:
+        num_envs = args.num_envs if args.num_envs is not None else MEDIUM_NUM_ENVS
+        max_iterations = (
+            args.max_iterations if args.max_iterations is not None else MEDIUM_MAX_ITERATIONS
+        )
+        seed = args.seed if args.seed != 42 else MEDIUM_SEED
+        env_cfg = make_climbing_medium_env_cfg(
+            num_envs=num_envs,
+            seed=seed,
+            episode_length_s=MEDIUM_EPISODE_LENGTH_S,
+            play=False,
+        )
+        return env_cfg, num_envs, max_iterations, MEDIUM_SAVE_INTERVAL, seed
 
     _task_name, env_cfg, _agent_cfg, _runner_cls = load_task_components(CLIMBING_TASK_ID)
     num_envs = args.num_envs if args.num_envs is not None else env_cfg.scene.num_envs

@@ -125,6 +125,7 @@ mjpython train_mimic/scripts/debug_climb.py --mode scene --seed 42
 
 # Training
 python train_mimic/scripts/train_climb.py --easy
+python train_mimic/scripts/train_climb.py --medium   # easy MDP, full 12-rung ladder
 ```
 
 Full documentation: **[BotRunner64.github.io/Teleopit/tutorials/climbing](https://BotRunner64.github.io/Teleopit/tutorials/climbing)**

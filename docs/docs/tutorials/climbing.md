@@ -99,6 +99,15 @@ python train_mimic/scripts/train_climb.py --easy
 # Default: 256 envs/GPU, 800 iterations
 ```
 
+### Medium preset (full ladder)
+
+Same MDP as `--easy` (assisted hold reset, both hands attached, high friction, 15 s episodes), but with a fixed full 12-rung ladder:
+
+```bash
+python train_mimic/scripts/train_climb.py --medium
+# Default: 256 envs/GPU, 800 iterations
+```
+
 ### Custom training
 
 ```bash
@@ -164,6 +173,11 @@ python train_mimic/scripts/play_climb.py \
     --checkpoint logs/rsl_rl/g1_general_climbing/<run>/model_800.pt \
     --easy --device cuda:0 --seed 42
 
+# Medium checkpoint (matches train --medium MDP)
+python train_mimic/scripts/play_climb.py \
+    --checkpoint logs/rsl_rl/g1_general_climbing/<run>/model_800.pt \
+    --medium --device cuda:0 --seed 42
+
 # Headless multi-seed mp4 (8 reset samples → one video at 30% speed)
 MUJOCO_GL=egl python train_mimic/scripts/play_climb.py \
     --checkpoint logs/rsl_rl/g1_general_climbing/<run>/model_800.pt \
@@ -175,7 +189,7 @@ python train_mimic/scripts/play_climb.py \
     --easy --viewer viser
 ```
 
-`--video` concatenates `--video-clips` reseeds (default `8`, seeds `seed..seed+clips-1`) into a single Full HD (`1920x1080`) `play_climb.mp4` under `<checkpoint_dir>/videos/play/`. Each clip is one full episode unless you pass `--video-length`. Playback defaults to `--video-speed 0.3` (30% of realtime). Without `--easy`, each reseed also resamples ladder layout when curriculum randomization is enabled.
+`--video` concatenates `--video-clips` reseeds (default `8`, seeds `seed..seed+clips-1`) into a single Full HD (`1920x1080`) `play_climb.mp4` under `<checkpoint_dir>/videos/play/`. Each clip is one full episode unless you pass `--video-length`. Playback defaults to `--video-speed 0.3` (30% of realtime). Without `--easy` / `--medium`, each reseed also resamples ladder layout when curriculum randomization is enabled.
 
 Smoke-ladder playback (Stage 8 checkpoints, no curriculum reset):
 
@@ -224,7 +238,7 @@ train_mimic/scripts/
 - **Simulation only.** Point-hand spheres and `connect` latches are MuJoCo abstractions, not a sim-to-real deployment claim. Training latches default to a **500 N** overload break and softened `solref` so an attached hand cannot act as an infinite-strength pivot.
 - **mujoco_warp sensor patch.** `train_mimic.warp_patches` fixes a `_frame_axis` UNKNOWN-branch codegen bug (`undefined symbol: xmat`) in mujoco_warp 3.8.x before env construction. Climbing entry points apply it automatically.
 - **Fixed compiled rung count.** Ladder topology is compiled once; poses and active masks vary at reset.
-- **Curriculum axes exist but easy preset keeps randomization off.** Expand one axis at a time after learnability is confirmed.
+- **Curriculum axes exist but easy/medium presets keep randomization off.** Expand one axis at a time after learnability is confirmed.
 
 ## Explicit non-goals
 
