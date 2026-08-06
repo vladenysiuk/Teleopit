@@ -2,125 +2,50 @@
   <img src="assets/teleopit_logo.jpg" width="80" alt="Teleopit">
 </p>
 
-<h1 align="center">Teleopit</h1>
+<h1 align="center">Teleopit — Climbing</h1>
 
 <p align="center">
-  Lightweight, extensible whole-body teleoperation framework for humanoid robots.
+  A fork of <a href="https://github.com/BotRunner64/Teleopit">Teleopit</a> for learning Unitree G1 ladder-climbing tasks in MuJoCo.
   <br/>
-  Real-time motion retargeting from BVH / Pico 4 VR to Unitree G1, in MuJoCo sim or on real hardware.
+  Trains <code>General-Climbing-G1</code> with mjlab RL (latches, contacts, curriculum) on top of the Teleopit / train_mimic stack.
 </p>
 
 <p align="center">
-  <a href="https://BotRunner64.github.io/Teleopit/">Documentation</a> &bull;
-  <a href="https://BotRunner64.github.io/Teleopit/zh-Hans/">中文文档</a> &bull;
-  <a href="https://BotRunner64.github.io/Teleopit/tutorials/pico-sim2sim">Pico Sim2Sim</a> &bull;
-  <a href="https://BotRunner64.github.io/Teleopit/tutorials/pico-sim2real">Pico Sim2Real</a> &bull;
-  <a href="https://BotRunner64.github.io/Teleopit/tutorials/training">Training</a>
+  <a href="docs/docs/tutorials/climbing.md">Climbing Tutorial</a> &bull;
+  <a href="docs/docs/reference/climbing-rl.md">Climbing RL Reference</a> &bull;
+  <a href="docs/docs/reference/climbing-simulator.md">Climbing Simulator</a> &bull;
+  <a href="https://BotRunner64.github.io/Teleopit/">Upstream Docs</a>
 </p>
 
 ---
 
-## Quick Start — Minimal Sim2Sim
+## Quick Start — Ladder Climbing
+
+**Docs:** [Climbing Tutorial](docs/docs/tutorials/climbing.md) · [Climbing RL Reference](docs/docs/reference/climbing-rl.md) · [Climbing Simulator](docs/docs/reference/climbing-simulator.md)
+
+`General-Climbing-G1` is a separate mjlab RL task. It does **not** share the teleoperation 167D tracking ONNX contract.
 
 **1. Install**
 
 ```bash
-pip install -e .
-```
-
-**2. Download assets**
-
-```bash
-pip install modelscope
-python scripts/setup/download_assets.py --only robots gmr ckpt bvh
-```
-
-The canonical Unitree G1 robot model is downloaded to
-`assets/robots/unitree_g1/g1_29dof.xml`. Training, sim2sim, retargeting, and FK
-validation all use this same XML.
-
-**3. Run**
-
-```bash
-python scripts/run/run_sim.py \
-    controller.policy_path=track.onnx \
-    input.bvh_file=data/sample_bvh/aiming1_subject1.bvh
-```
-
-You should see a MuJoCo viewer with the robot tracking the BVH motion.
-
-To show the simulated D435i RGB camera view, add the explicit `camera` viewer:
-
-```bash
-python scripts/run/run_sim.py \
-    controller.policy_path=track.onnx \
-    input.bvh_file=data/sample_bvh/aiming1_subject1.bvh \
-    'viewers=[sim2sim,camera]'
-```
-
-For sim2real, viewers are disabled by default. Add `viewers=retarget` to show
-the retargeted reference in an optional MuJoCo window.
-
-## Pico Motion Recording
-
-Record many Pico clips as training-ready G1 motion NPZ files:
-
-```bash
-pip install -e '.[pico4]'
-python scripts/run/record_pico_motion.py
-```
-
-The recorder starts the Pico receiver and live Retarget viewer before waiting
-for clip names, so preview keeps running while the terminal is idle. Enter a
-semantic clip name, then use `R` to start, `S` to save, `D` to discard, `N` for
-a new name, and `Q` to quit. Saved clips are written to
-`data/pico_motion/clips/` using the semantic label in the filename, with no
-sidecar JSON.
-
-Merge recorded clips into the standard HDF5 shard dataset:
-
-```bash
-python train_mimic/scripts/data/build_dataset.py \
-    --spec data/pico_motion/pico_recorded.yaml --force
-```
-
-## Sim2Real HDF5 Recording
-
-Pico sim2real can also record manual HDF5 episodes from the real G1:
-
-```bash
-pip install -e '.[recording]'
-# If you use RealSense video, install pyrealsense2 manually for your platform.
-# On Arm machines, prefer conda-forge:
-# conda install -c conda-forge pyrealsense2
-python scripts/run/run_sim2real.py --config-name sim2real_record \
-    controller.policy_path=track.onnx \
-    recording.task="walk forward"
-```
-
-Recording uses the terminal controls `R` start, `S` save, `D` discard, and `Q`
-shutdown. `STANDING`, `MOCAP`, `ARMS`, and paused mocap can be recorded. Saved
-episodes are written as `.h5` files under `data/recordings/sim2real_hdf5/episodes/`.
-`sim2real_record.yaml` stores camera frames as compressed MP4 sidecar files under
-`data/recordings/sim2real_hdf5/videos/` and keeps `frame_index` / `timestamp`
-sync metadata in the HDF5 episode. The low-dimensional HDF5 schema records
-`observation.state(68)`, `observation.mode(1)`, `action(36)` as the aligned
-reference qpos sent to the policy path, and `action.hand(12)` as the latest
-LinkerHand left/right 6D pose commands.
-
-## G1 Ladder Climbing (Training)
-
-`General-Climbing-G1` is a separate mjlab RL task for MuJoCo ladder climbing.
-It does not replace or alter the tracking ONNX contract.
-
-```bash
 pip install -e ".[train]"
-python scripts/setup/download_assets.py --only robots
+```
 
-# Automated regression (all climbing stage tests)
+**2. Download robot assets**
+
+```bash
+python scripts/setup/download_assets.py --only robots
+```
+
+Canonical model: `assets/robots/unitree_g1/g1_29dof.xml`.
+
+**3. Validate, then train**
+
+```bash
+# Automated regression
 python scripts/dev/run_climbing_regression.py
 
-# Interactive validation
+# Interactive scene check (macOS: mjpython)
 mjpython train_mimic/scripts/debug_climb.py --mode scene --seed 42
 
 # Training
@@ -128,15 +53,56 @@ python train_mimic/scripts/train_climb.py --easy
 python train_mimic/scripts/train_climb.py --medium   # easy MDP, full 12-rung ladder
 ```
 
-Full documentation: **[BotRunner64.github.io/Teleopit/tutorials/climbing](https://BotRunner64.github.io/Teleopit/tutorials/climbing)**
+See the [climbing tutorial](docs/docs/tutorials/climbing.md) for debug modes, presets, and playback. For rewards, PPO, curriculum, and model layout, see the [climbing RL reference](docs/docs/reference/climbing-rl.md).
 
-- [Tutorial](docs/docs/tutorials/climbing.md) — usage
-- [Simulator reference](docs/docs/reference/climbing-simulator.md) — ladder, contacts, latch
-- [RL reference](docs/docs/reference/climbing-rl.md) — rewards, PPO, curriculum
+Online mirror: **[BotRunner64.github.io/Teleopit/tutorials/climbing](https://BotRunner64.github.io/Teleopit/tutorials/climbing)**
 
-## Documentation
+---
 
-Full docs at **[BotRunner64.github.io/Teleopit](https://BotRunner64.github.io/Teleopit/)**, covering installation profiles, all tutorials, configuration reference, and architecture.
+## Upstream Teleopit (Tracking / Teleoperation)
+
+This fork retains the original whole-body teleoperation stack (BVH / Pico 4 → GMR retargeting → ONNX policy → MuJoCo or Unitree G1). Use it when you need sim2sim tracking or sim2real teleop, not climbing RL.
+
+### Minimal Sim2Sim
+
+```bash
+pip install -e .
+pip install modelscope
+python scripts/setup/download_assets.py --only robots gmr ckpt bvh
+
+python scripts/run/run_sim.py \
+    controller.policy_path=track.onnx \
+    input.bvh_file=data/sample_bvh/aiming1_subject1.bvh
+```
+
+Add `'viewers=[sim2sim,camera]'` for the D435i RGB camera view. Sim2real defaults to `viewers=none`; use `viewers=retarget` for an optional retarget window.
+
+### Pico Motion Recording
+
+```bash
+pip install -e '.[pico4]'
+python scripts/run/record_pico_motion.py
+```
+
+Terminal: `R` start, `S` save, `D` discard, `N` new name, `Q` quit. Clips land in `data/pico_motion/clips/`.
+
+```bash
+python train_mimic/scripts/data/build_dataset.py \
+    --spec data/pico_motion/pico_recorded.yaml --force
+```
+
+### Sim2Real HDF5 Recording
+
+```bash
+pip install -e '.[recording]'
+python scripts/run/run_sim2real.py --config-name sim2real_record \
+    controller.policy_path=track.onnx \
+    recording.task="walk forward"
+```
+
+Episodes under `data/recordings/sim2real_hdf5/`; MP4 sidecars under `videos/`.
+
+Upstream docs: **[BotRunner64.github.io/Teleopit](https://BotRunner64.github.io/Teleopit/)** (Pico Sim2Sim / Sim2Real, tracking training, architecture).
 
 ## Changelog
 
