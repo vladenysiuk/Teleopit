@@ -23,9 +23,9 @@ class ClimbingRewardConfig:
     # Head proxy: G1 29-DoF XML has no head body; d435i_link is the camera frame
     # at head height. Rewarding pelvis height pays for inverted salting.
     progress_body: str = "d435i_link"
-    upward_progress_weight: float = 2.0
-    new_attachment_weight: float = 10.0
-    success_weight: float = 50.0
+    upward_progress_weight: float = 20.0
+    new_attachment_weight: float = 50.0
+    success_weight: float = 500.0
     # Success is relative to the sampled ladder: goal = top_rung_h - clearance.
     # Clearance applies to ``progress_body`` (head), not pelvis.
     success_pelvis_clearance_below_top_l: float = 0.15
